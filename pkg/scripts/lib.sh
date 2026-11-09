@@ -1,6 +1,6 @@
 #!/bin/bash
 # Shared by preinstall and postinstall. Tokens are rendered by scripts/build-pkg.sh.
-# TMT88V_ROOT prefixes every filesystem path; it exists only so the fixture tests can run without touching the system.
+# RECEIPT_PRINTER_ROOT prefixes every filesystem path; it exists only so the fixture tests can run without touching the system.
 
 LABEL="@LABEL@"
 QUEUE="@QUEUE_NAME@"
@@ -17,17 +17,25 @@ UPDATER_BINARY="@UPDATER_BINARY_PATH@"
 UPDATER_PLIST="@UPDATER_PLIST_PATH@"
 CONFIG_FILE="@SUPPORT_DIR@/config.json"
 MIN_MACOS_MAJOR=@MIN_MACOS_MAJOR@
+MODEL_IDS="@MODEL_IDS@"
+DEFAULT_MODEL="tm-t88v"
+APP_PATH="@APP_PATH@"
+SETTINGS_URL="@SETTINGS_URL@"
 
-ROOT="${TMT88V_ROOT:-}"
+ROOT="${RECEIPT_PRINTER_ROOT:-}"
 STATE_DIR="$ROOT$SUPPORT_DIR/state"
 BACKUP_DIR="$STATE_DIR/backup"
 STATE_FILE="$STATE_DIR/install-state"
 UPDATE_MARKER="$STATE_DIR/update-in-progress"
 INSTALL_LOG="$ROOT$LOG_DIR/install.log"
+SELECTION_DIR="$ROOT$SUPPORT_DIR/selected-model"
+SETTINGS_FILE="$ROOT$SUPPORT_DIR/printer.json"
+PPD_FILE="$ROOT/etc/cups/ppd/$QUEUE.ppd"
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
 log() {
     mkdir -p "$(dirname "$INSTALL_LOG")"
-    echo "$(date '+%Y-%m-%dT%H:%M:%S') [tmt88v-installer] $*" | tee -a "$INSTALL_LOG"
+    echo "$(date '+%Y-%m-%dT%H:%M:%S') [receipt-printer-installer] $*" | tee -a "$INSTALL_LOG"
 }
 
 die() {
@@ -45,6 +53,140 @@ state_set() {
 
 state_get() {
     sed -n "s/^$1=//p" "$STATE_FILE" 2>/dev/null | tail -1
+}
+
+# One-time migration from the pre-rename "TM-T88V Compat" install (com.belchuke.tmt88vcompat). Removes only the files, launchd
+# jobs and print queue that installer created, and only the queue if it still points at our loopback service. Never fatal.
+LEGACY_PREFIX="com.belchuke.tmt88vcompat"
+LEGACY_QUEUE="TMT88V_Compat"
+remove_legacy_install() {
+    local found=0 label plist uri
+    for label in "$LEGACY_PREFIX.service" "$LEGACY_PREFIX.updater"; do
+        plist="/Library/LaunchDaemons/$label.plist"
+        if [[ -f "$ROOT$plist" ]]; then
+            found=1
+            launchctl bootout "system/$label" > /dev/null 2>&1 || true
+            rm -f "$ROOT$plist"
+        fi
+    done
+    for file in "/Library/PrivilegedHelperTools/$LEGACY_PREFIX.daemon" "/Library/PrivilegedHelperTools/$LEGACY_PREFIX.updater"; do
+        [[ -f "$ROOT$file" ]] && { found=1; rm -f "$ROOT$file"; }
+    done
+    if lpstat -v "$LEGACY_QUEUE" > /dev/null 2>&1; then
+        uri="$(lpoptions -p "$LEGACY_QUEUE" 2>/dev/null | tr ' ' '\n' | sed -n 's/^device-uri=//p' | head -n 1)"
+        if uri_is_our_service "$uri"; then
+            found=1
+            lpadmin -x "$LEGACY_QUEUE" > /dev/null 2>&1 && log "removed legacy queue $LEGACY_QUEUE" || log "WARNING: could not remove legacy queue $LEGACY_QUEUE"
+        else
+            log "legacy queue $LEGACY_QUEUE points at '$uri', not our service; left untouched"
+        fi
+    fi
+    if [[ -d "$ROOT/Library/Application Support/TMT88VCompat" ]]; then
+        found=1
+        rm -rf "$ROOT/Library/Application Support/TMT88VCompat"
+    fi
+    [[ -d "$ROOT/Library/Logs/TMT88VCompat" ]] && { found=1; rm -rf "$ROOT/Library/Logs/TMT88VCompat"; }
+    [[ "$found" == "1" ]] && log "removed the previous TM-T88V Compat installation (migrated to Receipt Printer)"
+    return 0
+}
+
+# The installer's printer picker drops one empty marker file per selected model into $SELECTION_DIR. Turn that into the
+# model stored in printer.json (which the service reads), keeping every other setting such as the logo.
+#   one marker  -> that model
+#   no marker   -> keep the stored model (silent updater runs, or a screen left untouched); first install defaults
+#   >1 markers  -> should not happen with the radio choices; use the first and warn
+# current-model.<id> mirrors the stored model so the installer's choice screen can preselect it on the next run.
+apply_model_selection() {
+    local id chosen="" count=0 stored=""
+    for id in $MODEL_IDS; do
+        if [[ -e "$SELECTION_DIR/$id" ]]; then
+            count=$((count + 1))
+            [[ -z "$chosen" ]] && chosen="$id"
+        fi
+    done
+    rm -rf "$SELECTION_DIR"
+    [[ "$count" -gt 1 ]] && log "WARNING: $count printer models were selected; using $chosen"
+
+    if [[ -f "$SETTINGS_FILE" ]]; then
+        stored="$(sed -n 's/.*"model"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$SETTINGS_FILE" | head -n 1)"
+    fi
+    if [[ -z "$chosen" ]]; then
+        if [[ -n "$stored" ]]; then
+            chosen="$stored"
+            log "no printer model selected; keeping $chosen"
+        else
+            chosen="$DEFAULT_MODEL"
+            log "no printer model selected; using the default $chosen"
+        fi
+    else
+        log "printer model selected: $chosen"
+    fi
+
+    mkdir -p "$ROOT$SUPPORT_DIR"
+    if [[ -f "$SETTINGS_FILE" ]] && plutil -replace model -string "$chosen" -r "$SETTINGS_FILE" > /dev/null 2>&1; then
+        :
+    else
+        printf '{\n  "model" : "%s"\n}\n' "$chosen" > "$SETTINGS_FILE"
+    fi
+    for id in $MODEL_IDS; do rm -f "$ROOT$SUPPORT_DIR/current-model.$id"; done
+    : > "$ROOT$SUPPORT_DIR/current-model.$chosen"
+
+    # Administrators can change the model and the logo with receipt-printer-config without sudo.
+    chmod 664 "$SETTINGS_FILE"
+    chmod 775 "$ROOT$SUPPORT_DIR"
+    if [[ -z "$ROOT" ]]; then
+        chgrp admin "$SETTINGS_FILE" "$SUPPORT_DIR" 2>/dev/null || log "WARNING: could not set admin group on the settings"
+    fi
+    return 0
+}
+
+# Adds the "Open Printer Utility" button (System Settings > Printers & Scanners > the printer > Options & Supplies > Utility)
+# by giving the queue's PPD an Apple *APPrinterUtilityPath. macOS passes that value to LaunchServices as a URL, so it must be a
+# URL scheme our app registers (a file path fails with error -50). The queue works without the button, so this never fails the
+# install. Run before verify_queue; lpadmin keeps the queue's device URI.
+add_settings_link() {
+    if [[ ! -d "$ROOT$APP_PATH" ]]; then
+        log "WARNING: the settings app is missing at $APP_PATH; the Utility button was not added"
+        return 0
+    fi
+    [[ -z "$ROOT" ]] && "$LSREGISTER" -f "$APP_PATH" > /dev/null 2>&1
+    if [[ ! -f "$PPD_FILE" ]]; then
+        log "WARNING: no PPD for queue $QUEUE at $PPD_FILE; the Utility button was not added"
+        return 0
+    fi
+    local tmp
+    tmp="$(mktemp)"
+    grep -v '^\*APPrinterUtilityPath' "$PPD_FILE" > "$tmp"
+    printf '*APPrinterUtilityPath: "%s"\n' "$SETTINGS_URL" >> "$tmp"
+    if lpadmin -p "$QUEUE" -P "$tmp" -o printer-is-shared=false > /dev/null 2>&1; then
+        log "added the Utility button for queue $QUEUE (opens $SETTINGS_URL)"
+    else
+        log "WARNING: could not add the Utility button to queue $QUEUE"
+    fi
+    rm -f "$tmp"
+    return 0
+}
+
+# Offers the optional logo step: opens the settings app for the logged-in user when no logo is configured yet.
+# Skipped for updater runs, fixture roots, machines with nobody logged in, and when RECEIPT_PRINTER_NO_UI=1. Never fails.
+open_settings_app() {
+    [[ -n "$ROOT" ]] && return 0
+    [[ "${RECEIPT_PRINTER_NO_UI:-0}" == "1" ]] && { log "RECEIPT_PRINTER_NO_UI=1: not opening the settings app"; return 0; }
+    update_in_progress && return 0
+    [[ -d "$APP_PATH" ]] || return 0
+    [[ -f "$SUPPORT_DIR/logo.png" || -f "$SUPPORT_DIR/bottom-logo.png" ]] && return 0
+    local uid
+    uid="$(stat -f %u /dev/console 2>/dev/null)"
+    if [[ ! "$uid" =~ ^[0-9]+$ || "$uid" == "0" ]]; then
+        log "nobody is logged in; the settings app was not opened"
+        return 0
+    fi
+    if launchctl asuser "$uid" /usr/bin/sudo -u "#$uid" /usr/bin/open -a "$APP_PATH" > /dev/null 2>&1; then
+        log "opened the settings app for the optional logo"
+    else
+        log "WARNING: could not open the settings app; open it from Applications or from the printer's Utility tab"
+    fi
+    return 0
 }
 
 service_loaded() {
@@ -132,11 +274,11 @@ port_listener() {
 
 KEEP_FLAG_FILE="/private/var/tmp/@LABEL@.keep-failed-state"
 
-# Development only. Rollback is skipped when TMT88V_INSTALLER_KEEP_FAILED_STATE=1 is in the environment, or when the
+# Development only. Rollback is skipped when RECEIPT_PRINTER_INSTALLER_KEEP_FAILED_STATE=1 is in the environment, or when the
 # root-owned flag file exists (sudo does not pass the environment through to Installer-run scripts):
 #   sudo touch /private/var/tmp/@LABEL@.keep-failed-state
 keep_failed_state() {
-    [[ "${TMT88V_INSTALLER_KEEP_FAILED_STATE:-0}" == "1" ]] && return 0
+    [[ "${RECEIPT_PRINTER_INSTALLER_KEEP_FAILED_STATE:-0}" == "1" ]] && return 0
     [[ -n "$ROOT" ]] && return 1
     [[ -f "$KEEP_FLAG_FILE" && "$(stat -f %u "$KEEP_FLAG_FILE" 2>/dev/null)" == "0" ]]
 }
@@ -151,7 +293,7 @@ diag() {
 collect_diagnostics() {
     log "==== service diagnostics ===="
     diag "launchctl print system/$LABEL" launchctl print "system/$LABEL"
-    diag "processes (pgrep -alf $LABEL / tmt88v)" bash -c "pgrep -alf '$LABEL'; pgrep -alf 'tmt88v'; true"
+    diag "processes (pgrep -alf $LABEL / receipt-printer)" bash -c "pgrep -alf '$LABEL'; pgrep -alf 'receipt-printer'; true"
     diag "listener on port $PORT" lsof -nP -iTCP:"$PORT" -sTCP:LISTEN
     diag "ls -la $SERVICE_BINARY" ls -la "$ROOT$SERVICE_BINARY"
     diag "file $SERVICE_BINARY" file "$ROOT$SERVICE_BINARY"
@@ -161,9 +303,9 @@ collect_diagnostics() {
     diag "service-stderr.log" bash -c "tail -n 40 '$ROOT$LOG_DIR/service-stderr.log' 2>&1 || echo '(no service-stderr.log)'"
     local logbin="/usr/bin/log"
     [[ -n "$ROOT" ]] && logbin="log"
-    diag "unified log, last 3 minutes (belchuke / tmt88v / syspolicyd exec policy)" \
+    diag "unified log, last 3 minutes (belchuke / receipt-printer / syspolicyd exec policy)" \
         "$logbin" show --last 3m --style compact --predicate \
-        'eventMessage CONTAINS[c] "belchuke" OR eventMessage CONTAINS[c] "tmt88v" OR (process == "syspolicyd" AND subsystem == "com.apple.syspolicy.exec") OR (process == "launchd" AND eventMessage CONTAINS[c] "tmt88v")'
+        'eventMessage CONTAINS[c] "belchuke" OR eventMessage CONTAINS[c] "receipt-printer" OR (process == "syspolicyd" AND subsystem == "com.apple.syspolicy.exec") OR (process == "launchd" AND eventMessage CONTAINS[c] "receipt-printer")'
     log "==== end of diagnostics ===="
 }
 

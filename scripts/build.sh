@@ -12,6 +12,8 @@ for tool in "${BINARIES[@]}"; do
     cp "$BIN_DIR/$tool" "$DIST_DIR/$tool"
 done
 
+./scripts/build-app.sh
+
 if [[ -n "${SIGNING_IDENTITY:-}" ]]; then
     ./scripts/sign.sh
 else
@@ -19,7 +21,7 @@ else
 fi
 
 status=0
-for binary in "$DIST_DIR"/tmt88v-*; do
+for binary in "$DIST_DIR"/receipt-printer-*; do
     echo "== $binary"
     file "$binary"
     archs="$(lipo -archs "$binary")"
@@ -34,4 +36,13 @@ for binary in "$DIST_DIR"/tmt88v-*; do
         status=1
     fi
 done
+app_binary="$DIST_DIR/$APP_NAME.app/Contents/MacOS/$APP_EXECUTABLE"
+echo "== $app_binary"
+archs="$(lipo -archs "$app_binary")"
+echo "lipo: $archs"
+[[ " $archs " == *" arm64 "* ]] || { echo "ERROR: settings app has no arm64 slice"; status=1; }
+if otool -L "$app_binary" | tail -n +2 | grep -vE '^\s*/(System/Library|usr/lib)/' ; then
+    echo "ERROR: settings app links a non-system library"
+    status=1
+fi
 exit $status

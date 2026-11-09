@@ -1,7 +1,7 @@
 #!/bin/bash
 # Verifies the two release assets before publishing:
-#   build/pkg/TMT88VCompat-<version>.pkg   (for humans and history)
-#   build/pkg/TMT88VCompat.pkg             (the stable name the updater downloads)
+#   build/pkg/ReceiptPrinter-<version>.pkg   (for humans and history)
+#   build/pkg/ReceiptPrinter.pkg             (the stable name the updater downloads)
 # They must be byte-identical, signed by Developer ID Installer team P3WL6DBK59, notarized and stapled, and carry the version in VERSION.
 set -uo pipefail
 
@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 source scripts/config.sh
 
 VERSIONED="${1:-$BUILD_DIR/pkg/$PKG_FILE_BASENAME.pkg}"
-ALIAS="$(dirname "$VERSIONED")/TMT88VCompat.pkg"
+ALIAS="$(dirname "$VERSIONED")/ReceiptPrinter.pkg"
 status=0
 fail() { echo "  FAIL: $*"; status=1; }
 
@@ -25,7 +25,7 @@ echo "== stapled ticket"
 xcrun stapler validate "$ALIAS" > /dev/null 2>&1 && echo "  stapled: yes" || fail "the stable-name package has no stapled ticket"
 
 echo "== updater-grade verification (the same code the installed updater runs)"
-UPDATER="${UPDATER_BINARY:-$DIST_DIR/tmt88v-updater}"
+UPDATER="${UPDATER_BINARY:-$DIST_DIR/receipt-printer-updater}"
 if [[ -x "$UPDATER" ]]; then
     out="$("$UPDATER" verify "$ALIAS" 2>&1)"; rc=$?
     echo "$out" | sed 's/^/  /'

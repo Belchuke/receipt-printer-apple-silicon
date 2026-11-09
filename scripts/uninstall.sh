@@ -1,30 +1,32 @@
 #!/bin/bash
-# Development uninstaller. Removes only what the TMT88V Compat installer created:
-#   the TMT88V_Compat queue (and only if it points at our IPP address), our launchd job, our service binary,
+# Development uninstaller. Removes only what the Receipt Printer installer created:
+#   the Receipt_Printer queue (and only if it points at our IPP address), our launchd job, our service binary,
 #   our support and log directories, and our package receipt.
 # It never touches Epson queues, Epson drivers under /Library/Printers, or any other CUPS setting.
 #
 #   sudo ./scripts/uninstall.sh [--yes] [--keep-logs]
-#   TMT88V_DRY_RUN=1 ./scripts/uninstall.sh --yes     print the actions without running them
-#   TMT88V_ROOT=/some/dir                             prefix for filesystem paths (used by the fixture tests)
+#   RECEIPT_PRINTER_DRY_RUN=1 ./scripts/uninstall.sh --yes     print the actions without running them
+#   RECEIPT_PRINTER_ROOT=/some/dir                             prefix for filesystem paths (used by the fixture tests)
 set -euo pipefail
 
-LABEL="${SERVICE_LABEL:-com.belchuke.tmt88vcompat.service}"
-PKG_ID="${PKG_IDENTIFIER:-com.belchuke.tmt88vcompat.pkg}"
-QUEUE="${QUEUE_NAME:-TMT88V_Compat}"
+LABEL="${SERVICE_LABEL:-com.belchuke.receiptprinter.service}"
+PKG_ID="${PKG_IDENTIFIER:-com.belchuke.receiptprinter.pkg}"
+QUEUE="${QUEUE_NAME:-Receipt_Printer}"
 PORT="${IPP_PORT:-8632}"
 PRINTER_URI="ipp://127.0.0.1:$PORT/ipp/print"
-ROOT="${TMT88V_ROOT:-}"
-DRY="${TMT88V_DRY_RUN:-0}"
-PREFIX="${BUNDLE_ID_PREFIX:-com.belchuke.tmt88vcompat}"
+ROOT="${RECEIPT_PRINTER_ROOT:-}"
+DRY="${RECEIPT_PRINTER_DRY_RUN:-0}"
+PREFIX="${BUNDLE_ID_PREFIX:-com.belchuke.receiptprinter}"
 SERVICE_BINARY="/Library/PrivilegedHelperTools/${SERVICE_BINARY_NAME:-$PREFIX.daemon}"
 LEGACY_SERVICE_BINARY="/Library/PrivilegedHelperTools/$LABEL"
 PLIST="/Library/LaunchDaemons/$LABEL.plist"
 UPDATER_LABEL="${UPDATER_LABEL:-$PREFIX.updater}"
 UPDATER_BINARY="/Library/PrivilegedHelperTools/${UPDATER_BINARY_NAME:-$PREFIX.updater}"
 UPDATER_PLIST="/Library/LaunchDaemons/$UPDATER_LABEL.plist"
-SUPPORT_DIR="/Library/Application Support/TMT88VCompat"
-LOG_DIR="/Library/Logs/TMT88VCompat"
+SUPPORT_DIR="/Library/Application Support/ReceiptPrinter"
+LOG_DIR="/Library/Logs/ReceiptPrinter"
+APP_PATH="/Applications/Receipt Printer Settings.app"
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
 assume_yes=0
 keep_logs=0
@@ -93,6 +95,8 @@ else
 fi
 
 run rm -f "$ROOT$PLIST" "$ROOT$SERVICE_BINARY" "$ROOT$LEGACY_SERVICE_BINARY" "$ROOT$UPDATER_PLIST" "$ROOT$UPDATER_BINARY"
+[[ -z "$ROOT" && -d "$APP_PATH" ]] && run "$LSREGISTER" -u "$APP_PATH" > /dev/null 2>&1 || true
+run rm -rf "$ROOT$APP_PATH"
 run rm -rf "$ROOT$SUPPORT_DIR"
 [[ "$keep_logs" == "1" ]] || run rm -rf "$ROOT$LOG_DIR"
 [[ -n "$ROOT" ]] || run pkgutil --forget "$PKG_ID" > /dev/null 2>&1 || true

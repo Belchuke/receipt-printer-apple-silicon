@@ -17,7 +17,7 @@ trap cleanup EXIT
 fail() { echo "FAIL: $*"; exit 1; }
 
 mkdir -p "$WORK/sink"
-"$BIN/tmt88v-service" --port "$PORT" --sink "$WORK/sink/" 2> "$WORK/service.log" > "$WORK/service.out" &
+"$BIN/receipt-printer-service" --port "$PORT" --sink "$WORK/sink/" 2> "$WORK/service.log" > "$WORK/service.out" &
 PID=$!
 for _ in $(seq 1 50); do grep -q printer-uri "$WORK/service.out" 2>/dev/null && break; sleep 0.1; done
 URI="ipp://127.0.0.1:$PORT/ipp/print"
@@ -67,7 +67,7 @@ for _ in $(seq 1 50); do [[ -f "$WORK/sink/job-2.escpos" ]] && break; sleep 0.1;
 
 for job in 1 2; do
     echo "-- job-$job.escpos"
-    "$BIN/tmt88v-raster-test" --decode "$WORK/sink/job-$job.escpos" | tee "$WORK/decode$job.txt"
+    "$BIN/receipt-printer-raster-test" --decode "$WORK/sink/job-$job.escpos" | tee "$WORK/decode$job.txt"
     grep -q "512x" "$WORK/decode$job.txt" || fail "job $job not 512 wide"
     grep -q "cut true" "$WORK/decode$job.txt" || fail "job $job not cut"
 done

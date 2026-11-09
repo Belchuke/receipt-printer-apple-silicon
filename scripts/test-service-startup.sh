@@ -6,7 +6,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 source scripts/config.sh
 
-BIN_SRC="${1:-$DIST_DIR/tmt88v-service}"
+BIN_SRC="${1:-$DIST_DIR/receipt-printer-service}"
 [[ -x "$BIN_SRC" ]] || { echo "build first: $BIN_SRC not found (./scripts/build.sh)"; exit 1; }
 
 PORT="${TEST_PORT:-18671}"

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Fixture tests for the installer scripts, plist, identifiers and uninstaller.
-# Nothing here touches the system: launchctl, lpadmin, lpstat, ... are stubs and all paths live under a temp TMT88V_ROOT.
+# Nothing here touches the system: launchctl, lpadmin, lpstat, ... are stubs and all paths live under a temp RECEIPT_PRINTER_ROOT.
 set -uo pipefail
 
 cd "$(dirname "$0")/.."
@@ -45,6 +45,7 @@ S
 #!/bin/bash
 echo "lpadmin $*" >> "$STUB_STATE/calls"
 [[ -n "${STUB_FAIL_LPADMIN:-}" ]] && { echo "lpadmin: forbidden" >&2; exit 1; }
+[[ -n "${STUB_FAIL_PPD:-}" && " $* " == *" -P "* ]] && { echo "lpadmin: bad PPD" >&2; exit 1; }
 name=""; uri=""; remove=""; shared="true"
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -52,11 +53,13 @@ while [[ $# -gt 0 ]]; do
         -x) remove="$2"; shift 2 ;;
         -v) uri="$2"; shift 2 ;;
         -o) [[ "$2" == "printer-is-shared=false" ]] && shared="false"; shift 2 ;;
+        -P) cp "$2" "$STUB_STATE/last.ppd"; shift 2 ;;
         -m|-D) shift 2 ;;
         *) shift ;;
     esac
 done
 touch "$STUB_STATE/queues"
+[[ -z "$uri" && -z "$remove" ]] && uri="$(grep "^$name|" "$STUB_STATE/queues" | cut -d'|' -f2)"
 [[ -n "${STUB_CANONICAL_URI:-}" ]] && uri="$STUB_CANONICAL_URI"
 [[ -n "${STUB_IGNORE_SHARED:-}" ]] && shared="true"
 if [[ -n "$remove" ]]; then
@@ -117,21 +120,21 @@ new_fixture() {
     touch "$F/state/queues"
     for s in preinstall postinstall lib.sh; do render_template "pkg/scripts/$s" "$F/scripts/$s"; done
     chmod +x "$F/scripts/preinstall" "$F/scripts/postinstall"
-    export TMT88V_ROOT="$F/root" STUB_STATE="$F/state" PATH="$F/stubs:$ORIG_PATH"
-    unset STUB_FAIL_BOOTSTRAP STUB_FAIL_LPADMIN STUB_SERVICE_DOWN STUB_ARM STUB_MACOS STUB_PORT_BUSY STUB_BINARY_EXIT TMT88V_INSTALLER_KEEP_FAILED_STATE STUB_LPSTAT_LANG STUB_CANONICAL_URI STUB_IGNORE_SHARED STUB_QUEUE_STATE STUB_ACCEPTING STUB_FAIL_URI_PROBE STUB_FAIL_BOOTSTRAP_UPDATER STUB_UPDATER_EXIT
+    export RECEIPT_PRINTER_ROOT="$F/root" STUB_STATE="$F/state" PATH="$F/stubs:$ORIG_PATH"
+    unset STUB_FAIL_BOOTSTRAP STUB_FAIL_LPADMIN STUB_SERVICE_DOWN STUB_ARM STUB_MACOS STUB_PORT_BUSY STUB_BINARY_EXIT RECEIPT_PRINTER_INSTALLER_KEEP_FAILED_STATE STUB_LPSTAT_LANG STUB_CANONICAL_URI STUB_IGNORE_SHARED STUB_QUEUE_STATE STUB_ACCEPTING STUB_FAIL_URI_PROBE STUB_FAIL_BOOTSTRAP_UPDATER STUB_UPDATER_EXIT STUB_FAIL_PPD
 }
 
 # place_payload CONTENT: simulates Installer laying down the payload files
 place_payload() {
-    mkdir -p "$TMT88V_ROOT$(dirname "$SERVICE_BINARY_PATH")" "$TMT88V_ROOT$(dirname "$PLIST_PATH")" "$TMT88V_ROOT$SUPPORT_DIR/share"
-    printf '#!/bin/bash\n# %s\nexit "${STUB_BINARY_EXIT:-0}"\n' "${1:-new}" > "$TMT88V_ROOT$SERVICE_BINARY_PATH"
-    chmod +x "$TMT88V_ROOT$SERVICE_BINARY_PATH"
-    echo "plist" > "$TMT88V_ROOT$PLIST_PATH"
-    mkdir -p "$TMT88V_ROOT$(dirname "$UPDATER_BINARY_PATH")" "$TMT88V_ROOT$(dirname "$UPDATER_PLIST_PATH")"
-    printf '#!/bin/bash\n# %s\nexit "${STUB_UPDATER_EXIT:-0}"\n' "${2:-new-updater}" > "$TMT88V_ROOT$UPDATER_BINARY_PATH"
-    chmod +x "$TMT88V_ROOT$UPDATER_BINARY_PATH"
-    echo "updater-plist-${2:-new-updater}" > "$TMT88V_ROOT$UPDATER_PLIST_PATH"
-    printf '{\n  "automaticUpdates": true\n}\n' > "$TMT88V_ROOT$SUPPORT_DIR/share/config.default.json"
+    mkdir -p "$RECEIPT_PRINTER_ROOT$(dirname "$SERVICE_BINARY_PATH")" "$RECEIPT_PRINTER_ROOT$(dirname "$PLIST_PATH")" "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/share"
+    printf '#!/bin/bash\n# %s\nexit "${STUB_BINARY_EXIT:-0}"\n' "${1:-new}" > "$RECEIPT_PRINTER_ROOT$SERVICE_BINARY_PATH"
+    chmod +x "$RECEIPT_PRINTER_ROOT$SERVICE_BINARY_PATH"
+    echo "plist" > "$RECEIPT_PRINTER_ROOT$PLIST_PATH"
+    mkdir -p "$RECEIPT_PRINTER_ROOT$(dirname "$UPDATER_BINARY_PATH")" "$RECEIPT_PRINTER_ROOT$(dirname "$UPDATER_PLIST_PATH")"
+    printf '#!/bin/bash\n# %s\nexit "${STUB_UPDATER_EXIT:-0}"\n' "${2:-new-updater}" > "$RECEIPT_PRINTER_ROOT$UPDATER_BINARY_PATH"
+    chmod +x "$RECEIPT_PRINTER_ROOT$UPDATER_BINARY_PATH"
+    echo "updater-plist-${2:-new-updater}" > "$RECEIPT_PRINTER_ROOT$UPDATER_PLIST_PATH"
+    printf '{\n  "automaticUpdates": true\n}\n' > "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/share/config.default.json"
 }
 
 run_install() {
@@ -143,7 +146,7 @@ run_install() {
 queue_count() { grep -c "^$1|" "$STUB_STATE/queues" || true; }
 calls_have() { grep -qF -- "$1" "$STUB_STATE/calls"; }
 calls_lack() { ! grep -qF -- "$1" "$STUB_STATE/calls" 2>/dev/null; }
-state_is() { grep -qx "$1=$2" "$TMT88V_ROOT$SUPPORT_DIR/state/install-state"; }
+state_is() { grep -qx "$1=$2" "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/state/install-state"; }
 service_running() { [[ -f "$STUB_STATE/loaded.service" ]]; }
 updater_running() { [[ -f "$STUB_STATE/loaded.updater" ]]; }
 mode_of() { stat -f %Lp "$1"; }
@@ -151,23 +154,23 @@ mode_of() { stat -f %Lp "$1"; }
 ORIG_PATH="$PATH"
 
 echo "identifiers and templates"
-check "service label"        equals "$SERVICE_LABEL" "com.belchuke.tmt88vcompat.service"
-check "package identifier"   equals "$PKG_IDENTIFIER" "com.belchuke.tmt88vcompat.pkg"
-check "manager identifier"   equals "$MANAGER_IDENTIFIER" "com.belchuke.tmt88vcompat.manager"
-check "bundle prefix"        equals "$BUNDLE_ID_PREFIX" "com.belchuke.tmt88vcompat"
+check "service label"        equals "$SERVICE_LABEL" "com.belchuke.receiptprinter.service"
+check "package identifier"   equals "$PKG_IDENTIFIER" "com.belchuke.receiptprinter.pkg"
+check "manager identifier"   equals "$MANAGER_IDENTIFIER" "com.belchuke.receiptprinter.manager"
+check "bundle prefix"        equals "$BUNDLE_ID_PREFIX" "com.belchuke.receiptprinter"
 check "printer uri"          equals "$PRINTER_URI" "ipp://127.0.0.1:8632/ipp/print"
-check "queue name"           equals "$QUEUE_NAME" "TMT88V_Compat"
-check "signing id service"   equals "$(signing_identifier tmt88v-service)" "com.belchuke.tmt88vcompat.service"
-check "signing id diag"      equals "$(signing_identifier tmt88v-diag)" "com.belchuke.tmt88vcompat.diag"
-check "no old placeholder anywhere" bash -c '! grep -rIl "org.tmt88v-compat" scripts pkg Sources Package.swift README.md docs 2>/dev/null | grep -v test-installer.sh | grep .'
+check "queue name"           equals "$QUEUE_NAME" "Receipt_Printer"
+check "signing id service"   equals "$(signing_identifier receipt-printer-service)" "com.belchuke.receiptprinter.service"
+check "signing id diag"      equals "$(signing_identifier receipt-printer-diag)" "com.belchuke.receiptprinter.diag"
+check "no old placeholder anywhere" bash -c '! grep -rIl "org.receipt-printer-compat" scripts pkg Sources Package.swift README.md docs 2>/dev/null | grep -v test-installer.sh | grep .'
 
 PLIST_OUT="$TMP/service.plist"
 render_template pkg/launchd/service.plist.template "$PLIST_OUT"
 check "plist lints"               plutil -lint "$PLIST_OUT"
 check "plist label"               equals "$(plutil -extract Label raw "$PLIST_OUT")" "$SERVICE_LABEL"
-check "plist program"             equals "$(plutil -extract ProgramArguments.0 raw "$PLIST_OUT")" "/Library/PrivilegedHelperTools/com.belchuke.tmt88vcompat.daemon"
+check "plist program"             equals "$(plutil -extract ProgramArguments.0 raw "$PLIST_OUT")" "/Library/PrivilegedHelperTools/com.belchuke.receiptprinter.daemon"
 check "plist port"                equals "$(plutil -extract ProgramArguments.2 raw "$PLIST_OUT")" "8632"
-check "plist log path"            equals "$(plutil -extract ProgramArguments.4 raw "$PLIST_OUT")" "/Library/Logs/TMT88VCompat/service.log"
+check "plist log path"            equals "$(plutil -extract ProgramArguments.4 raw "$PLIST_OUT")" "/Library/Logs/ReceiptPrinter/service.log"
 check "plist quiet flag"          equals "$(plutil -extract ProgramArguments.5 raw "$PLIST_OUT")" "--quiet"
 check "plist RunAtLoad"           equals "$(plutil -extract RunAtLoad raw "$PLIST_OUT")" "true"
 check "plist KeepAlive SuccessfulExit=false" equals "$(plutil -extract KeepAlive.SuccessfulExit raw "$PLIST_OUT")" "false"
@@ -182,7 +185,7 @@ check "distribution is arm64-only" file_has "$TMP/dist.xml" 'hostArchitectures="
 check "distribution min macOS"     file_has "$TMP/dist.xml" 'min="13.0"'
 check "distribution system domain only" file_has "$TMP/dist.xml" 'enable_localSystem="true"'
 check "distribution package id"    file_has "$TMP/dist.xml" "$PKG_IDENTIFIER"
-check "uninstall defaults match config" bash -c "grep -q 'com.belchuke.tmt88vcompat.service' scripts/uninstall.sh && grep -q 'TMT88V_Compat' scripts/uninstall.sh && grep -q 'com.belchuke.tmt88vcompat.pkg' scripts/uninstall.sh"
+check "uninstall defaults match config" bash -c "grep -q 'com.belchuke.receiptprinter.service' scripts/uninstall.sh && grep -q 'Receipt_Printer' scripts/uninstall.sh && grep -q 'com.belchuke.receiptprinter.pkg' scripts/uninstall.sh"
 
 echo "fresh install"
 new_fixture fresh
@@ -198,7 +201,7 @@ check "queue recorded as created this run" state_is queue_created_this_run 1
 check "no queue removed" calls_lack "lpadmin -x"
 check "launchctl uses bootstrap, not load" calls_lack "launchctl load"
 check "Epson queue untouched" grep -q "^EPSON_TM_T88V|" "$STUB_STATE/queues"
-check "install log written" test -s "$TMT88V_ROOT$LOG_DIR/install.log"
+check "install log written" test -s "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log"
 
 echo "idempotent re-run"
 : > "$STUB_STATE/calls"
@@ -232,8 +235,8 @@ new_fixture down; export STUB_SERVICE_DOWN=1
 run_install; check "service that never answers fails the install" equals "$?" "12"
 check "failed install: no queue created" equals "$(queue_count "$QUEUE_NAME")" "0"
 check "failed install: service stopped" test ! -f "$STUB_STATE/loaded.service"
-check "failed install: new binary removed" test ! -e "$TMT88V_ROOT$SERVICE_BINARY_PATH"
-check "failed install: new plist removed" test ! -e "$TMT88V_ROOT$PLIST_PATH"
+check "failed install: new binary removed" test ! -e "$RECEIPT_PRINTER_ROOT$SERVICE_BINARY_PATH"
+check "failed install: new plist removed" test ! -e "$RECEIPT_PRINTER_ROOT$PLIST_PATH"
 check "failed install: state rolled back" state_is phase rolled-back
 
 new_fixture lpfail; echo "EPSON_TM_T88V|usb://x|false" >> "$STUB_STATE/queues"; export STUB_FAIL_LPADMIN=1
@@ -251,7 +254,7 @@ new_fixture upgrade
 run_install "old-binary"; check "initial install" equals "$?" "0"
 export STUB_SERVICE_DOWN=1
 run_install "new-binary"; check "failed upgrade fails" equals "$?" "12"
-check "failed upgrade restores the previous binary" file_has "$TMT88V_ROOT$SERVICE_BINARY_PATH" "# old-binary"
+check "failed upgrade restores the previous binary" file_has "$RECEIPT_PRINTER_ROOT$SERVICE_BINARY_PATH" "# old-binary"
 check "failed upgrade restarts the previous service" service_running
 check "failed upgrade keeps the pre-existing queue" equals "$(queue_count "$QUEUE_NAME")" "1"
 check "failed upgrade did not remove the queue" calls_lack "lpadmin -x"
@@ -259,10 +262,10 @@ check "failed upgrade did not remove the queue" calls_lack "lpadmin -x"
 
 echo "binary file name (the root cause of the failed real install)"
 check "service binary is not named like a bundle (.service/.app)" bash -c "case '$(basename "$SERVICE_BINARY_PATH")' in *.service|*.app|*.xpc|*.bundle|*.framework|*.plugin) exit 1;; esac"
-check "service binary name"  equals "$(basename "$SERVICE_BINARY_PATH")" "com.belchuke.tmt88vcompat.daemon"
+check "service binary name"  equals "$(basename "$SERVICE_BINARY_PATH")" "com.belchuke.receiptprinter.daemon"
 check "plist launches the renamed binary" equals "$(plutil -extract ProgramArguments.0 raw "$PLIST_OUT")" "$SERVICE_BINARY_PATH"
-check "launchd label is unchanged (.service label is fine)" equals "$SERVICE_LABEL" "com.belchuke.tmt88vcompat.service"
-REAL_BIN="$REPO_ROOT/build/dist/tmt88v-service"
+check "launchd label is unchanged (.service label is fine)" equals "$SERVICE_LABEL" "com.belchuke.receiptprinter.service"
+REAL_BIN="$REPO_ROOT/build/dist/receipt-printer-service"
 if [[ -x "$REAL_BIN" ]]; then
     smoke_dir="$(mktemp -d)"
     cp "$REAL_BIN" "$smoke_dir/$(basename "$SERVICE_BINARY_PATH")"
@@ -275,43 +278,43 @@ fi
 echo "exec canary and diagnostics"
 new_fixture killed; export STUB_BINARY_EXIT=137
 run_install; check "a binary killed at exec fails the install" equals "$?" "12"
-check "message says SIGKILL at exec" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "killed with SIGKILL at exec"
+check "message says SIGKILL at exec" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "killed with SIGKILL at exec"
 check "failure is caught before launchd is involved" calls_lack "launchctl bootstrap"
-check "diagnostics printed before rollback" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "==== service diagnostics ===="
-check "diagnostics: launchctl print" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "diagnostic: launchctl print system/$SERVICE_LABEL"
-check "diagnostics: port listener" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "diagnostic: listener on port $IPP_PORT"
-check "diagnostics: file" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "diagnostic: file "
-check "diagnostics: codesign" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "diagnostic: codesign --verify --deep --strict --verbose=4"
-check "diagnostics: plist" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "diagnostic: plutil -p"
-check "diagnostics: service.log" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "diagnostic: service.log"
-check "diagnostics: service-stderr.log" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "diagnostic: service-stderr.log"
-check "diagnostics: unified log" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "diagnostic: unified log"
-check "diagnostics: missing service.log is explained" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "never wrote a log line"
-check "diagnostics come before the rollback" bash -c "awk '/==== service diagnostics/{d=NR} /rolling back resources/{r=NR} END{exit !(d && r && d<r)}' '$TMT88V_ROOT$LOG_DIR/install.log'"
-check "killed binary: rolled back (no files, no queue)" bash -c "[[ ! -e '$TMT88V_ROOT$SERVICE_BINARY_PATH' && \$(grep -c '^$QUEUE_NAME|' '$STUB_STATE/queues') == 0 ]]"
+check "diagnostics printed before rollback" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "==== service diagnostics ===="
+check "diagnostics: launchctl print" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "diagnostic: launchctl print system/$SERVICE_LABEL"
+check "diagnostics: port listener" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "diagnostic: listener on port $IPP_PORT"
+check "diagnostics: file" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "diagnostic: file "
+check "diagnostics: codesign" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "diagnostic: codesign --verify --deep --strict --verbose=4"
+check "diagnostics: plist" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "diagnostic: plutil -p"
+check "diagnostics: service.log" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "diagnostic: service.log"
+check "diagnostics: service-stderr.log" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "diagnostic: service-stderr.log"
+check "diagnostics: unified log" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "diagnostic: unified log"
+check "diagnostics: missing service.log is explained" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "never wrote a log line"
+check "diagnostics come before the rollback" bash -c "awk '/==== service diagnostics/{d=NR} /rolling back resources/{r=NR} END{exit !(d && r && d<r)}' '$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log'"
+check "killed binary: rolled back (no files, no queue)" bash -c "[[ ! -e '$RECEIPT_PRINTER_ROOT$SERVICE_BINARY_PATH' && \$(grep -c '^$QUEUE_NAME|' '$STUB_STATE/queues') == 0 ]]"
 
 new_fixture unreach; export STUB_SERVICE_DOWN=1
 run_install; check "unreachable service fails the install" equals "$?" "12"
-check "health-check failure also prints diagnostics" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "==== service diagnostics ===="
-check "health-check failure is rolled back by default" test ! -e "$TMT88V_ROOT$SERVICE_BINARY_PATH"
+check "health-check failure also prints diagnostics" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "==== service diagnostics ===="
+check "health-check failure is rolled back by default" test ! -e "$RECEIPT_PRINTER_ROOT$SERVICE_BINARY_PATH"
 
-echo "developer debug mode (TMT88V_INSTALLER_KEEP_FAILED_STATE)"
-new_fixture keep; export STUB_SERVICE_DOWN=1 TMT88V_INSTALLER_KEEP_FAILED_STATE=1
+echo "developer debug mode (RECEIPT_PRINTER_INSTALLER_KEEP_FAILED_STATE)"
+new_fixture keep; export STUB_SERVICE_DOWN=1 RECEIPT_PRINTER_INSTALLER_KEEP_FAILED_STATE=1
 run_install; check "debug mode: install still reports failure" equals "$?" "12"
-check "debug mode: binary left in place" test -x "$TMT88V_ROOT$SERVICE_BINARY_PATH"
-check "debug mode: plist left in place" test -f "$TMT88V_ROOT$PLIST_PATH"
+check "debug mode: binary left in place" test -x "$RECEIPT_PRINTER_ROOT$SERVICE_BINARY_PATH"
+check "debug mode: plist left in place" test -f "$RECEIPT_PRINTER_ROOT$PLIST_PATH"
 check "debug mode: launchd job left loaded" service_running
-check "debug mode: logs left in place" test -s "$TMT88V_ROOT$LOG_DIR/install.log"
-check "debug mode: says rollback was skipped on purpose" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "rollback intentionally SKIPPED"
+check "debug mode: logs left in place" test -s "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log"
+check "debug mode: says rollback was skipped on purpose" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "rollback intentionally SKIPPED"
 check "debug mode: no queue created" equals "$(queue_count "$QUEUE_NAME")" "0"
 check "debug mode: state recorded" state_is phase failed-kept-for-debugging
 check "debug mode: no rollback actions ran" calls_lack "lpadmin -x"
-new_fixture keepq; export STUB_FAIL_LPADMIN=1 TMT88V_INSTALLER_KEEP_FAILED_STATE=1
+new_fixture keepq; export STUB_FAIL_LPADMIN=1 RECEIPT_PRINTER_INSTALLER_KEEP_FAILED_STATE=1
 run_install; check "debug mode does not apply to queue failures" equals "$?" "12"
-check "queue failure still rolls back in debug mode" test ! -e "$TMT88V_ROOT$SERVICE_BINARY_PATH"
+check "queue failure still rolls back in debug mode" test ! -e "$RECEIPT_PRINTER_ROOT$SERVICE_BINARY_PATH"
 new_fixture off
 run_install; check "debug mode is off by default" equals "$?" "0"
-check "default install never mentions skipped rollback" file_lacks "$TMT88V_ROOT$LOG_DIR/install.log" "SKIPPED"
+check "default install never mentions skipped rollback" file_lacks "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "SKIPPED"
 
 
 echo "queue verification: locale (Apple's CUPS translates lpstat; Danish prints 'enhed til <queue>: <uri>')"
@@ -319,7 +322,7 @@ new_fixture danish; export STUB_LPSTAT_LANG=da
 echo "EPSON_TM_T88V|usb://EPSON/TM-T88V?serial=1|false" >> "$STUB_STATE/queues"
 check "stub really speaks Danish" bash -c "lpstat -v EPSON_TM_T88V | grep -q '^enhed til EPSON_TM_T88V: '"
 run_install; check "install succeeds when CUPS output is Danish" equals "$?" "0"
-check "Danish: queue verified in the log" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "verified (device URI $PRINTER_URI"
+check "Danish: queue verified in the log" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "verified (device URI $PRINTER_URI"
 run_install; check "Danish: re-run is accepted (preinstall recognises our own queue)" equals "$?" "0"
 check "Danish: still one queue" equals "$(queue_count "$QUEUE_NAME")" "1"
 ./scripts/uninstall.sh --yes > "$F/un.out" 2>&1; check "Danish: uninstall removes our queue" equals "$(queue_count "$QUEUE_NAME")" "0"
@@ -344,32 +347,32 @@ for bad in "ipp://192.168.1.5:$IPP_PORT/ipp/print" "ipp://printer.example.com:$I
 done
 new_fixture unreachable; export STUB_CANONICAL_URI="ipp://localhost:$IPP_PORT/ipp/print" STUB_FAIL_URI_PROBE="localhost:$IPP_PORT"
 run_install; check "a loopback URI that does not reach our service is rejected" equals "$?" "12"
-check "  reason says it does not reach the service" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "does not reach the local service"
+check "  reason says it does not reach the service" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "does not reach the local service"
 
 echo "queue verification: printer-is-shared and state"
 new_fixture shared; export STUB_IGNORE_SHARED=1
 run_install; check "a queue left shared fails the install" equals "$?" "12"
-check "  reason names printer-is-shared" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "printer-is-shared is 'true', expected 'false'"
+check "  reason names printer-is-shared" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "printer-is-shared is 'true', expected 'false'"
 check "  rolled back" equals "$(queue_count "$QUEUE_NAME")" "0"
 new_fixture stopped; export STUB_QUEUE_STATE=5
 run_install; check "a stopped queue fails the install" equals "$?" "12"
-check "  reason says stopped" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "the queue is stopped"
+check "  reason says stopped" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "the queue is stopped"
 new_fixture notaccepting; export STUB_ACCEPTING=false
 run_install; check "a queue not accepting jobs fails the install" equals "$?" "12"
 new_fixture sharedok
-run_install; check "normal install confirms printer-is-shared=false in the log" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "printer-is-shared='false'"
+run_install; check "normal install confirms printer-is-shared=false in the log" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "printer-is-shared='false'"
 
 echo "queue verification: diagnostics on failure"
 new_fixture qdiag; export STUB_CANONICAL_URI="ipp://192.168.1.5:$IPP_PORT/ipp/print" STUB_LPSTAT_LANG=da
 run_install
-check "diag: section header" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "==== queue diagnostics ===="
-check "diag: requested URI" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "requested device URI:    $PRINTER_URI"
-check "diag: parsed URI" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "parsed device-uri:       'ipp://192.168.1.5:$IPP_PORT/ipp/print'"
-check "diag: reason" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "reason the check failed: device-uri 'ipp://192.168.1.5:$IPP_PORT/ipp/print' is not the local service"
-check "diag: raw lpstat output (translated) is captured" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "enhed til $QUEUE_NAME: ipp://192.168.1.5"
-check "diag: raw lpoptions output is captured" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "device-uri=ipp://192.168.1.5"
-check "diag: authoritative ipptool query attempted" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "ipptool Get-Printer-Attributes to cupsd"
-check "diag: one-line summary of requested vs returned" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "queue check: requested='$PRINTER_URI' cups-returned='ipp://192.168.1.5:$IPP_PORT/ipp/print'"
+check "diag: section header" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "==== queue diagnostics ===="
+check "diag: requested URI" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "requested device URI:    $PRINTER_URI"
+check "diag: parsed URI" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "parsed device-uri:       'ipp://192.168.1.5:$IPP_PORT/ipp/print'"
+check "diag: reason" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "reason the check failed: device-uri 'ipp://192.168.1.5:$IPP_PORT/ipp/print' is not the local service"
+check "diag: raw lpstat output (translated) is captured" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "enhed til $QUEUE_NAME: ipp://192.168.1.5"
+check "diag: raw lpoptions output is captured" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "device-uri=ipp://192.168.1.5"
+check "diag: authoritative ipptool query attempted" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "ipptool Get-Printer-Attributes to cupsd"
+check "diag: one-line summary of requested vs returned" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "queue check: requested='$PRINTER_URI' cups-returned='ipp://192.168.1.5:$IPP_PORT/ipp/print'"
 
 echo "uri_is_our_service direct table"
 new_fixture uritable
@@ -386,9 +389,9 @@ echo "automatic updater: package scripts, plist and config"
 UPDATER_PLIST_OUT="$TMP/updater.plist"
 render_template pkg/launchd/updater.plist.template "$UPDATER_PLIST_OUT"
 check "updater plist lints" plutil -lint "$UPDATER_PLIST_OUT"
-check "updater label" equals "$(plutil -extract Label raw "$UPDATER_PLIST_OUT")" "com.belchuke.tmt88vcompat.updater"
-check "updater label equals config" equals "$UPDATER_LABEL" "com.belchuke.tmt88vcompat.updater"
-check "updater binary path" equals "$(plutil -extract ProgramArguments.0 raw "$UPDATER_PLIST_OUT")" "/Library/PrivilegedHelperTools/com.belchuke.tmt88vcompat.updater"
+check "updater label" equals "$(plutil -extract Label raw "$UPDATER_PLIST_OUT")" "com.belchuke.receiptprinter.updater"
+check "updater label equals config" equals "$UPDATER_LABEL" "com.belchuke.receiptprinter.updater"
+check "updater binary path" equals "$(plutil -extract ProgramArguments.0 raw "$UPDATER_PLIST_OUT")" "/Library/PrivilegedHelperTools/com.belchuke.receiptprinter.updater"
 check "updater runs the 'run' subcommand" equals "$(plutil -extract ProgramArguments.1 raw "$UPDATER_PLIST_OUT")" "run"
 check "updater is root" equals "$(plutil -extract UserName raw "$UPDATER_PLIST_OUT")" "root"
 check "updater RunAtLoad" equals "$(plutil -extract RunAtLoad raw "$UPDATER_PLIST_OUT")" "true"
@@ -396,7 +399,7 @@ check "updater wakes hourly (it decides in-process whether 24h+jitter has passed
 check "updater runs as a background process" equals "$(plutil -extract ProcessType raw "$UPDATER_PLIST_OUT")" "Background"
 check "updater is not kept alive in a loop" bash -c "! plutil -extract KeepAlive raw '$UPDATER_PLIST_OUT' >/dev/null 2>&1"
 check "updater binary file name is not bundle-style" bash -c "case '$(basename "$UPDATER_BINARY_PATH")' in *.service|*.app|*.xpc|*.bundle) exit 1;; esac"
-check "updater signing identifier" equals "$(signing_identifier tmt88v-updater)" "com.belchuke.tmt88vcompat.updater"
+check "updater signing identifier" equals "$(signing_identifier receipt-printer-updater)" "com.belchuke.receiptprinter.updater"
 check "default config enables updates" bash -c "grep -q '\"automaticUpdates\": true' pkg/share/config.default.json"
 check "package scripts never use the network" bash -c "! grep -rEq 'curl|wget|nc ' pkg/scripts"
 check "payload does not ship config.json" bash -c "! grep -q 'install.*config.json' scripts/build-pkg.sh"
@@ -404,106 +407,106 @@ check "payload does not ship config.json" bash -c "! grep -q 'install.*config.js
 echo "automatic updater: installation"
 new_fixture upd
 run_install; check "install succeeds" equals "$?" "0"
-check "updater files installed" test -x "$TMT88V_ROOT$UPDATER_BINARY_PATH"
-check "updater plist installed" test -f "$TMT88V_ROOT$UPDATER_PLIST_PATH"
+check "updater files installed" test -x "$RECEIPT_PRINTER_ROOT$UPDATER_BINARY_PATH"
+check "updater plist installed" test -f "$RECEIPT_PRINTER_ROOT$UPDATER_PLIST_PATH"
 check "updater job bootstrapped" updater_running
 check "service job also bootstrapped" service_running
-check "default config.json created" file_has "$TMT88V_ROOT$SUPPORT_DIR/config.json" '"automaticUpdates": true'
-check "updater binary mode 755" equals "$(mode_of "$TMT88V_ROOT$UPDATER_BINARY_PATH")" "755"
-check "updater plist mode 644" equals "$(mode_of "$TMT88V_ROOT$UPDATER_PLIST_PATH")" "644"
-check "config.json mode 644" equals "$(mode_of "$TMT88V_ROOT$SUPPORT_DIR/config.json")" "644"
-check "state directory mode 755" equals "$(mode_of "$TMT88V_ROOT$SUPPORT_DIR/state")" "755"
+check "default config.json created" file_has "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/config.json" '"automaticUpdates": true'
+check "updater binary mode 755" equals "$(mode_of "$RECEIPT_PRINTER_ROOT$UPDATER_BINARY_PATH")" "755"
+check "updater plist mode 644" equals "$(mode_of "$RECEIPT_PRINTER_ROOT$UPDATER_PLIST_PATH")" "644"
+check "config.json mode 644" equals "$(mode_of "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/config.json")" "644"
+check "state directory mode 755" equals "$(mode_of "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/state")" "755"
 check "updater bootstrapped through launchctl bootstrap" calls_have "launchctl bootstrap system $UPDATER_PLIST_PATH"
-check "install log records the new config" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "created the default config.json"
+check "install log records the new config" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "created the default config.json"
 
 echo "automatic updater: config is preserved across upgrades"
 new_fixture cfg
-mkdir -p "$TMT88V_ROOT$SUPPORT_DIR"; printf '{"automaticUpdates": false}\n' > "$TMT88V_ROOT$SUPPORT_DIR/config.json"
+mkdir -p "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR"; printf '{"automaticUpdates": false}\n' > "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/config.json"
 run_install; check "install over an existing config succeeds" equals "$?" "0"
-check "config=false is preserved" equals "$(cat "$TMT88V_ROOT$SUPPORT_DIR/config.json")" '{"automaticUpdates": false}'
+check "config=false is preserved" equals "$(cat "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/config.json")" '{"automaticUpdates": false}'
 run_install; check "second upgrade succeeds" equals "$?" "0"
-check "config=false still preserved after a second upgrade" equals "$(cat "$TMT88V_ROOT$SUPPORT_DIR/config.json")" '{"automaticUpdates": false}'
-check "log says the config was kept" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "kept the existing config.json"
-printf 'garbage not json' > "$TMT88V_ROOT$SUPPORT_DIR/config.json"
-run_install; check "a malformed config is not overwritten either (updater fails safe on it)" equals "$(cat "$TMT88V_ROOT$SUPPORT_DIR/config.json")" "garbage not json"
+check "config=false still preserved after a second upgrade" equals "$(cat "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/config.json")" '{"automaticUpdates": false}'
+check "log says the config was kept" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "kept the existing config.json"
+printf 'garbage not json' > "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/config.json"
+run_install; check "a malformed config is not overwritten either (updater fails safe on it)" equals "$(cat "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/config.json")" "garbage not json"
 
 echo "automatic updater: idempotent"
 new_fixture updidem
 run_install; run_install; run_install
 check "repeat installs succeed" updater_running
 check "updater loaded exactly once" bash -c "[[ \$(ls '$STUB_STATE'/loaded.updater* | wc -l | tr -d ' ') -eq 1 ]]"
-check "config unchanged and valid" file_has "$TMT88V_ROOT$SUPPORT_DIR/config.json" '"automaticUpdates": true'
+check "config unchanged and valid" file_has "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/config.json" '"automaticUpdates": true'
 
 echo "automatic updater: installed BY the updater (its own launchd job must not be touched)"
 new_fixture selfupd
 run_install; : > "$STUB_STATE/calls"
-printf '%s\n' "$$" > "$TMT88V_ROOT$SUPPORT_DIR/state/update-in-progress"
+printf '%s\n' "$$" > "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/state/update-in-progress"
 run_install "new" "newer-updater"
 check "upgrade started by the updater succeeds" equals "$?" "0"
 check "updater job is not booted out" calls_lack "launchctl bootout system/$UPDATER_LABEL"
 check "updater job is not re-bootstrapped" calls_lack "launchctl bootstrap system $UPDATER_PLIST_PATH"
-check "log explains why" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "started by the updater"
+check "log explains why" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "started by the updater"
 check "print service was still replaced normally" calls_have "launchctl bootstrap system $PLIST_PATH"
-check "new updater binary is on disk for the next scheduled run" file_has "$TMT88V_ROOT$UPDATER_BINARY_PATH" "# newer-updater"
+check "new updater binary is on disk for the next scheduled run" file_has "$RECEIPT_PRINTER_ROOT$UPDATER_BINARY_PATH" "# newer-updater"
 sleep 0 & dead=$!; wait $dead
-printf '%s\n' "$dead" > "$TMT88V_ROOT$SUPPORT_DIR/state/update-in-progress"; : > "$STUB_STATE/calls"
+printf '%s\n' "$dead" > "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/state/update-in-progress"; : > "$STUB_STATE/calls"
 run_install; check "stale marker (dead pid) is ignored; manual install reloads the updater" calls_have "launchctl bootstrap system $UPDATER_PLIST_PATH"
 
 echo "automatic updater: can never fail the print installation"
 new_fixture updfail; export STUB_FAIL_BOOTSTRAP_UPDATER=1
 run_install; check "updater bootstrap failure does not fail the install" equals "$?" "0"
 check "queue still created" equals "$(queue_count "$QUEUE_NAME")" "1"
-check "warning logged" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "WARNING: could not bootstrap the updater job"
+check "warning logged" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "WARNING: could not bootstrap the updater job"
 new_fixture updbroken; export STUB_UPDATER_EXIT=137
 run_install; check "an updater binary that cannot execute does not fail the install" equals "$?" "0"
 check "print service is up regardless" service_running
-check "warning names the problem" file_has "$TMT88V_ROOT$LOG_DIR/install.log" "updater binary cannot be executed"
+check "warning names the problem" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "updater binary cannot be executed"
 check "install completed" state_is phase complete
 
 echo "automatic updater: rollback"
 new_fixture updrb; export STUB_SERVICE_DOWN=1
 run_install; check "failed first install" equals "$?" "12"
-check "rollback removes the new updater binary" test ! -e "$TMT88V_ROOT$UPDATER_BINARY_PATH"
-check "rollback removes the new updater plist" test ! -e "$TMT88V_ROOT$UPDATER_PLIST_PATH"
+check "rollback removes the new updater binary" test ! -e "$RECEIPT_PRINTER_ROOT$UPDATER_BINARY_PATH"
+check "rollback removes the new updater plist" test ! -e "$RECEIPT_PRINTER_ROOT$UPDATER_PLIST_PATH"
 check "rollback never loaded the updater" bash -c "! updater_running" 
 new_fixture updrb2
 run_install "old" "old-updater"; check "initial install" equals "$?" "0"
 export STUB_SERVICE_DOWN=1
 run_install "new" "new-updater"; check "failed upgrade" equals "$?" "12"
-check "failed upgrade restores the previous updater binary" file_has "$TMT88V_ROOT$UPDATER_BINARY_PATH" "# old-updater"
-check "failed upgrade restores the previous updater plist" file_has "$TMT88V_ROOT$UPDATER_PLIST_PATH" "updater-plist-old-updater"
-check "failed upgrade keeps the existing config" file_has "$TMT88V_ROOT$SUPPORT_DIR/config.json" "automaticUpdates"
+check "failed upgrade restores the previous updater binary" file_has "$RECEIPT_PRINTER_ROOT$UPDATER_BINARY_PATH" "# old-updater"
+check "failed upgrade restores the previous updater plist" file_has "$RECEIPT_PRINTER_ROOT$UPDATER_PLIST_PATH" "updater-plist-old-updater"
+check "failed upgrade keeps the existing config" file_has "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/config.json" "automaticUpdates"
 
 echo "uninstall targets only our resources"
 new_fixture uninstall
 echo "EPSON_TM_T88V|usb://EPSON/TM-T88V?serial=1|false" >> "$STUB_STATE/queues"
-echo "TMT88V_Compat_Test|$PRINTER_URI|true" >> "$STUB_STATE/queues"
-mkdir -p "$TMT88V_ROOT/Library/Printers/EPSON/TerminalPrinter"; echo driver > "$TMT88V_ROOT/Library/Printers/EPSON/TerminalPrinter/filter"
+echo "Receipt_Printer_Test|$PRINTER_URI|true" >> "$STUB_STATE/queues"
+mkdir -p "$RECEIPT_PRINTER_ROOT/Library/Printers/EPSON/TerminalPrinter"; echo driver > "$RECEIPT_PRINTER_ROOT/Library/Printers/EPSON/TerminalPrinter/filter"
 run_install; check "install before uninstall" equals "$?" "0"
-echo "updater log" > "$TMT88V_ROOT$LOG_DIR/updater.log"
+echo "updater log" > "$RECEIPT_PRINTER_ROOT$LOG_DIR/updater.log"
 ./scripts/uninstall.sh --yes > "$F/un.out" 2>&1; check "uninstall succeeds" equals "$?" "0"
 check "our queue removed" equals "$(queue_count "$QUEUE_NAME")" "0"
 check "service unloaded" test ! -f "$STUB_STATE/loaded.service"
-check "binary removed" test ! -e "$TMT88V_ROOT$SERVICE_BINARY_PATH"
-check "plist removed" test ! -e "$TMT88V_ROOT$PLIST_PATH"
-check "support dir removed" test ! -e "$TMT88V_ROOT$SUPPORT_DIR"
+check "binary removed" test ! -e "$RECEIPT_PRINTER_ROOT$SERVICE_BINARY_PATH"
+check "plist removed" test ! -e "$RECEIPT_PRINTER_ROOT$PLIST_PATH"
+check "support dir removed" test ! -e "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR"
 check "updater job unloaded" bash -c "! updater_running"
-check "updater binary removed" test ! -e "$TMT88V_ROOT$UPDATER_BINARY_PATH"
-check "updater plist removed" test ! -e "$TMT88V_ROOT$UPDATER_PLIST_PATH"
-check "config.json removed" test ! -e "$TMT88V_ROOT$SUPPORT_DIR/config.json"
-check "updater state removed" test ! -e "$TMT88V_ROOT$SUPPORT_DIR/state"
-check "updater log removed" test ! -e "$TMT88V_ROOT$LOG_DIR/updater.log"
-check "log dir removed" test ! -e "$TMT88V_ROOT$LOG_DIR"
+check "updater binary removed" test ! -e "$RECEIPT_PRINTER_ROOT$UPDATER_BINARY_PATH"
+check "updater plist removed" test ! -e "$RECEIPT_PRINTER_ROOT$UPDATER_PLIST_PATH"
+check "config.json removed" test ! -e "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/config.json"
+check "updater state removed" test ! -e "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/state"
+check "updater log removed" test ! -e "$RECEIPT_PRINTER_ROOT$LOG_DIR/updater.log"
+check "log dir removed" test ! -e "$RECEIPT_PRINTER_ROOT$LOG_DIR"
 check "Epson queue remains" grep -q "^EPSON_TM_T88V|" "$STUB_STATE/queues"
-check "other test queue remains" grep -q "^TMT88V_Compat_Test|" "$STUB_STATE/queues"
-check "Epson files remain" test -f "$TMT88V_ROOT/Library/Printers/EPSON/TerminalPrinter/filter"
+check "other test queue remains" grep -q "^Receipt_Printer_Test|" "$STUB_STATE/queues"
+check "Epson files remain" test -f "$RECEIPT_PRINTER_ROOT/Library/Printers/EPSON/TerminalPrinter/filter"
 check "only our queue was removed" bash -c "[[ \$(grep -c 'lpadmin -x' '$STUB_STATE/calls') == 1 ]] && grep -q 'lpadmin -x $QUEUE_NAME\$' '$STUB_STATE/calls'"
 ./scripts/uninstall.sh --yes > "$F/un2.out" 2>&1; check "uninstall is repeatable" equals "$?" "0"
 
 new_fixture legacy
-mkdir -p "$TMT88V_ROOT/Library/PrivilegedHelperTools"; echo old > "$TMT88V_ROOT/Library/PrivilegedHelperTools/$SERVICE_LABEL"
+mkdir -p "$RECEIPT_PRINTER_ROOT/Library/PrivilegedHelperTools"; echo old > "$RECEIPT_PRINTER_ROOT/Library/PrivilegedHelperTools/$SERVICE_LABEL"
 ./scripts/uninstall.sh --yes > "$F/un.out" 2>&1
-check "uninstall also removes the old .service-named binary" test ! -e "$TMT88V_ROOT/Library/PrivilegedHelperTools/$SERVICE_LABEL"
+check "uninstall also removes the old .service-named binary" test ! -e "$RECEIPT_PRINTER_ROOT/Library/PrivilegedHelperTools/$SERVICE_LABEL"
 
 new_fixture foreign
 echo "$QUEUE_NAME|ipp://other.example/ipp|true" >> "$STUB_STATE/queues"
@@ -511,11 +514,154 @@ echo "$QUEUE_NAME|ipp://other.example/ipp|true" >> "$STUB_STATE/queues"
 check "queue with a foreign URI is not removed" grep -q "^$QUEUE_NAME|ipp://other.example" "$STUB_STATE/queues"
 
 new_fixture dry
-run_install > /dev/null; before="$(ls -R "$TMT88V_ROOT" | md5)"
-TMT88V_DRY_RUN=1 ./scripts/uninstall.sh --yes > "$F/dry.out" 2>&1
+run_install > /dev/null; before="$(ls -R "$RECEIPT_PRINTER_ROOT" | md5)"
+RECEIPT_PRINTER_DRY_RUN=1 ./scripts/uninstall.sh --yes > "$F/dry.out" 2>&1
 check "dry run prints actions" file_has "$F/dry.out" "DRY-RUN: lpadmin -x $QUEUE_NAME"
-check "dry run changes nothing" equals "$(ls -R "$TMT88V_ROOT" | md5)" "$before"
+check "dry run changes nothing" equals "$(ls -R "$RECEIPT_PRINTER_ROOT" | md5)" "$before"
 check "dry run keeps the queue" equals "$(queue_count "$QUEUE_NAME")" "1"
+
+echo
+echo "printer model picker"
+# run_install_with_models ID...: like run_install, but the installer's picker has dropped these markers before postinstall
+run_install_with_models() {
+    "$F/scripts/preinstall" > "$F/pre.out" 2>&1 || return 11
+    place_payload new new-updater
+    mkdir -p "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/selected-model"
+    for id in "$@"; do : > "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/selected-model/$id"; done
+    "$F/scripts/postinstall" > "$F/post.out" 2>&1 || return 12
+}
+model_in_settings() { sed -n 's/.*"model"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/printer.json"; }
+
+new_fixture pick-m30
+run_install_with_models tm-m30ii; check "picker: install succeeds" equals "$?" "0"
+check "picker: m30II stored in printer.json" equals "$(model_in_settings)" "tm-m30ii"
+check "picker: markers consumed" test ! -e "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/selected-model"
+check "picker: current-model marker written" test -f "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/current-model.tm-m30ii"
+check "picker: no stale current-model marker" test ! -e "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/current-model.tm-t88v"
+check "picker: settings are group-writable for admins" equals "$(mode_of "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/printer.json")" "664"
+
+new_fixture pick-t88vii
+run_install_with_models tm-t88vii; check "picker: TM-T88VII install succeeds" equals "$?" "0"
+check "picker: TM-T88VII stored in printer.json" equals "$(model_in_settings)" "tm-t88vii"
+check "picker: TM-T88VII marker written" test -f "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/current-model.tm-t88vii"
+run_install_with_models tm-m30ii; check "picker: switching from TM-T88VII to TM-m30II" equals "$(model_in_settings)" "tm-m30ii"
+check "picker: the TM-T88VII marker is gone after switching" test ! -e "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/current-model.tm-t88vii"
+
+new_fixture pick-default
+run_install_with_models; check "picker: nothing selected still installs" equals "$?" "0"
+check "picker: first install defaults to the TM-T88V" equals "$(model_in_settings)" "tm-t88v"
+
+new_fixture pick-keep
+run_install_with_models tm-m30ii
+printf '{\n  "logo" : {\n    "enabled" : true,\n    "gapDots" : 8,\n    "position" : "bottom"\n  },\n  "model" : "tm-m30ii"\n}\n' > "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/printer.json"
+run_install_with_models; check "picker: silent upgrade installs" equals "$?" "0"
+check "picker: silent upgrade keeps the stored model" equals "$(model_in_settings)" "tm-m30ii"
+check "picker: silent upgrade keeps the logo settings" grep -q '"position" : "bottom"' "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/printer.json"
+
+new_fixture pick-change
+run_install_with_models tm-m30ii
+printf '{\n  "bottomLogo" : {\n    "enabled" : true,\n    "gapDots" : 8\n  },\n  "model" : "tm-m30ii"\n}\n' > "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/printer.json"
+run_install_with_models tm-t88v; check "picker: reinstall with another model installs" equals "$?" "0"
+check "picker: another model replaces the stored one" equals "$(model_in_settings)" "tm-t88v"
+check "picker: changing the model keeps settings written by an older version" grep -q '"gapDots" : 8' "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/printer.json"
+check "picker: marker follows the change" test -f "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/current-model.tm-t88v"
+
+new_fixture pick-two
+run_install_with_models tm-t88v tm-m30ii; check "picker: two markers still install" equals "$?" "0"
+check "picker: two markers warn and pick the first" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "WARNING: 2 printer models were selected"
+
+echo
+echo "settings app and the printer's Utility button"
+make_ppd_and_app() {
+    mkdir -p "$RECEIPT_PRINTER_ROOT/etc/cups/ppd" "$RECEIPT_PRINTER_ROOT$APP_PATH/Contents"
+    printf '*PPD-Adobe: "4.3"\n*ModelName: "Receipt Printer"\n*APPrinterUtilityPath: "/old/path.app"\n*cupsFilter2: "image/urf image/urf 100 -"\n' > "$RECEIPT_PRINTER_ROOT/etc/cups/ppd/$QUEUE_NAME.ppd"
+}
+new_fixture utility-link
+make_ppd_and_app
+run_install; check "utility: install succeeds" equals "$?" "0"
+check "utility: lpadmin re-applied the PPD" calls_have "lpadmin -p $QUEUE_NAME -P"
+check "utility: PPD links to the settings URL" grep -qxF "*APPrinterUtilityPath: \"$SETTINGS_URL\"" "$STUB_STATE/last.ppd"
+check "utility: stale utility path removed" bash -c "[[ \$(grep -c APPrinterUtilityPath '$STUB_STATE/last.ppd') == 1 ]]"
+check "utility: rest of the PPD preserved" grep -q "cupsFilter2" "$STUB_STATE/last.ppd"
+check "utility: queue keeps the local service URI" bash -c "grep -q '^$QUEUE_NAME|ipp://127.0.0.1:$IPP_PORT/ipp/print|false' '$STUB_STATE/queues'"
+check "utility: log says it was added" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "added the Utility button"
+check "utility: URL scheme is not a file path" bash -c "[[ '$SETTINGS_URL' == receiptprinter://* ]]"
+
+new_fixture utility-no-ppd
+mkdir -p "$RECEIPT_PRINTER_ROOT$APP_PATH/Contents"
+run_install; check "utility: missing PPD does not fail the install" equals "$?" "0"
+check "utility: missing PPD is logged" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "no PPD for queue"
+check "utility: queue still created" equals "$(queue_count "$QUEUE_NAME")" "1"
+
+new_fixture utility-no-app
+run_install; check "utility: missing app does not fail the install" equals "$?" "0"
+check "utility: missing app is logged" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "settings app is missing"
+check "utility: no PPD re-applied without the app" calls_lack "-P"
+
+new_fixture utility-lpadmin-p-fails
+make_ppd_and_app
+# only the PPD re-apply fails; queue creation succeeds
+STUB_FAIL_PPD=1 run_install; check "utility: failing PPD re-apply does not fail the install" equals "$?" "0"
+check "utility: failing PPD re-apply is logged" file_has "$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log" "could not add the Utility button"
+
+new_fixture app-not-opened-in-fixtures
+make_ppd_and_app
+run_install; check "ui: settings app is never opened for fixture roots" calls_lack "open -a"
+check "ui: install log has no open attempt" bash -c "! grep -q 'opened the settings app' '$RECEIPT_PRINTER_ROOT$LOG_DIR/install.log'"
+
+echo
+echo "settings app bundle"
+render_template pkg/app/Info.plist.template "$TMP/Info.plist"
+check "app Info.plist is valid" plutil -lint "$TMP/Info.plist"
+check "app registers the URL scheme" bash -c "[[ \$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' '$TMP/Info.plist') == '$SETTINGS_URL_SCHEME' ]]"
+check "app bundle identifier" bash -c "[[ \$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' '$TMP/Info.plist') == '$APP_BUNDLE_ID' ]]"
+check "app executable name" bash -c "[[ \$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' '$TMP/Info.plist') == '$APP_EXECUTABLE' ]]"
+check "app executable is not named like a bundle" bash -c "[[ '$APP_EXECUTABLE' != *.app && '$APP_EXECUTABLE' != *.service ]]"
+check "app installs into /Applications" equals "$APP_PATH" "/Applications/Receipt Printer Settings.app"
+
+new_fixture uninstall-app
+make_ppd_and_app; run_install > /dev/null
+./scripts/uninstall.sh --yes > "$F/un.out" 2>&1; check "uninstall with the settings app succeeds" equals "$?" "0"
+check "uninstall removes the settings app" test ! -e "$RECEIPT_PRINTER_ROOT$APP_PATH"
+
+echo
+echo "installer distribution and picker packages"
+render_template pkg/distribution.xml.template "$TMP/distribution.xml"
+check "distribution.xml is well-formed" xmllint --noout "$TMP/distribution.xml"
+for id in "${MODEL_IDS[@]}"; do
+    check "distribution has a picker choice for $id" grep -q "id=\"model-$id\"" "$TMP/distribution.xml"
+    check "distribution references the picker package for $id" grep -q "$MODEL_PKG_PREFIX.$id" "$TMP/distribution.xml"
+    check "updater allow-list knows $id" grep -q "\"$id\"" Sources/ReceiptPrinterUpdater/UpdaterConstants.swift
+    check "model registry knows $id" grep -q "(\"$id\"," Sources/ReceiptPrinterCore/Printer/PrinterRegistry.swift
+done
+for id in "${MODEL_IDS[@]}"; do
+    check "radio rule for $id mentions every other model" bash -c "choice=\$(tr '\n' ' ' < '$TMP/distribution.xml' | sed 's/.*<choice id=\"model-$id\"\\([^>]*\\)>.*/\\1/'); for other in ${MODEL_IDS[*]}; do [[ \$other == $id ]] || [[ \$choice == *\"choices['model-\$other'].selected\"* ]] || exit 1; done"
+done
+check "installer uses the customize screen" grep -q 'customize="always"' "$TMP/distribution.xml"
+check "main package choice is hidden and preselected" grep -q 'id="default".*visible="false"' "$TMP/distribution.xml"
+
+echo
+echo "migration from the TM-T88V Compat install"
+new_fixture legacy-migrate
+LP="$RECEIPT_PRINTER_ROOT/Library"
+mkdir -p "$LP/PrivilegedHelperTools" "$LP/LaunchDaemons" "$LP/Application Support/TMT88VCompat/state" "$LP/Logs/TMT88VCompat"
+for f in PrivilegedHelperTools/com.belchuke.tmt88vcompat.daemon PrivilegedHelperTools/com.belchuke.tmt88vcompat.updater LaunchDaemons/com.belchuke.tmt88vcompat.service.plist LaunchDaemons/com.belchuke.tmt88vcompat.updater.plist; do echo old > "$LP/$f"; done
+echo "TMT88V_Compat|ipp://127.0.0.1:8632/ipp/print|false" >> "$STUB_STATE/queues"
+echo "EPSON_TM_T88V|usb://EPSON/TM-T88V?serial=1|false" >> "$STUB_STATE/queues"
+run_install; check "migration: install succeeds" equals "$?" "0"
+check "migration: old service binary removed" test ! -e "$LP/PrivilegedHelperTools/com.belchuke.tmt88vcompat.daemon"
+check "migration: old updater binary removed" test ! -e "$LP/PrivilegedHelperTools/com.belchuke.tmt88vcompat.updater"
+check "migration: old plists removed" bash -c "[[ ! -e '$LP/LaunchDaemons/com.belchuke.tmt88vcompat.service.plist' && ! -e '$LP/LaunchDaemons/com.belchuke.tmt88vcompat.updater.plist' ]]"
+check "migration: old support and log directories removed" bash -c "[[ ! -e '$LP/Application Support/TMT88VCompat' && ! -e '$LP/Logs/TMT88VCompat' ]]"
+check "migration: old queue removed" equals "$(queue_count TMT88V_Compat)" "0"
+check "migration: new queue created" equals "$(queue_count "$QUEUE_NAME")" "1"
+check "migration: Epson queue untouched" grep -q "^EPSON_TM_T88V|" "$STUB_STATE/queues"
+
+new_fixture legacy-foreign
+mkdir -p "$RECEIPT_PRINTER_ROOT/Library/Application Support/TMT88VCompat"
+echo "TMT88V_Compat|ipp://printer.example/ipp|false" >> "$STUB_STATE/queues"
+run_install; check "migration: foreign-URI old queue does not block the install" equals "$?" "0"
+check "migration: foreign-URI old queue is left alone" grep -q "^TMT88V_Compat|ipp://printer.example" "$STUB_STATE/queues"
 
 echo
 echo "installer fixture tests: $pass passed, $failures failed"

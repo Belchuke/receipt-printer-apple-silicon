@@ -1,5 +1,5 @@
 {
-	NAME "TMT88V service answers Get-Printer-Attributes"
+	NAME "Receipt Printer service answers Get-Printer-Attributes"
 	OPERATION Get-Printer-Attributes
 	GROUP operation-attributes-tag
 	ATTR charset attributes-charset utf-8

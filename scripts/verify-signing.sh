@@ -1,5 +1,5 @@
 #!/bin/bash
-# Verifies the signatures of the tmt88v binaries. Set ALLOW_ADHOC=1 to skip the identity/timestamp checks (dry runs).
+# Verifies the signatures of the receipt-printer binaries. Set ALLOW_ADHOC=1 to skip the identity/timestamp checks (dry runs).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -35,6 +35,25 @@ for tool in "${TOOLS[@]}"; do
         echo "$info" | grep -Eq "^TeamIdentifier=[A-Z0-9]{10}$" || fail "no TeamIdentifier"
     fi
 done
+
+app="$DIST_DIR/$APP_NAME.app"
+echo "== $app"
+if [[ ! -d "$app" ]]; then
+    fail "settings app missing"
+else
+    codesign --verify --deep --strict --verbose=2 "$app" || fail "codesign --verify --deep --strict (settings app)"
+    info="$(codesign -dv --verbose=4 "$app" 2>&1)"
+    echo "$info" | sed 's/^/  /'
+    echo "$info" | grep -qxF "Identifier=$APP_BUNDLE_ID" || fail "settings app identifier is not $APP_BUNDLE_ID"
+    echo "$info" | grep -Eq "flags=0x[0-9a-f]+\(.*runtime" || fail "settings app: hardened runtime flag missing"
+    [[ "$(lipo -archs "$app/Contents/MacOS/$APP_EXECUTABLE")" == "arm64" ]] || fail "settings app is not arm64-only"
+    /usr/libexec/PlistBuddy -c "Print :CFBundleURLTypes:0:CFBundleURLSchemes:0" "$app/Contents/Info.plist" 2>/dev/null | grep -qxF "$SETTINGS_URL_SCHEME" || fail "settings app does not register the $SETTINGS_URL_SCHEME:// URL scheme"
+    if [[ "${ALLOW_ADHOC:-}" != "1" ]]; then
+        echo "$info" | grep -q "^Authority=Developer ID Application:" || fail "settings app not signed by a Developer ID Application certificate"
+        echo "$info" | grep -q "^Timestamp=" || fail "settings app has no secure timestamp"
+        echo "$info" | grep -Eq "^TeamIdentifier=[A-Z0-9]{10}$" || fail "settings app has no TeamIdentifier"
+    fi
+fi
 
 [[ $status -eq 0 ]] && echo "signing verification PASSED" || echo "signing verification FAILED"
 exit $status

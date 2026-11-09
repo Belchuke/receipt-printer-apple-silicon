@@ -39,7 +39,7 @@ echo "notarized and stapled: $PKG"
 
 # The stable-name asset is created ONLY now, from the finalized (notarized + stapled) bytes. Copying earlier would leave it
 # without the stapled ticket and no longer identical to the versioned file. Never notarize the alias separately.
-ALIAS="$(dirname "$PKG")/TMT88VCompat.pkg"
+ALIAS="$(dirname "$PKG")/ReceiptPrinter.pkg"
 if [[ "$(basename "$PKG")" == "$PKG_FILE_BASENAME.pkg" ]]; then
     cp -f "$PKG" "$ALIAS"
     a="$(shasum -a 256 "$PKG" | cut -d' ' -f1)"

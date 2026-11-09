@@ -2,18 +2,20 @@
 import PackageDescription
 
 let package = Package(
-    name: "TMT88VCompat",
+    name: "ReceiptPrinter",
     platforms: [.macOS(.v13)],
     products: [
-        .executable(name: "tmt88v-diag", targets: ["tmt88v-diag"]),
-        .executable(name: "tmt88v-test", targets: ["tmt88v-test"]),
-        .executable(name: "tmt88v-raster-test", targets: ["tmt88v-raster-test"]),
-        .executable(name: "tmt88v-service", targets: ["tmt88v-service"]),
-        .executable(name: "tmt88v-updater", targets: ["tmt88v-updater"]),
+        .executable(name: "receipt-printer-diag", targets: ["receipt-printer-diag"]),
+        .executable(name: "receipt-printer-test", targets: ["receipt-printer-test"]),
+        .executable(name: "receipt-printer-raster-test", targets: ["receipt-printer-raster-test"]),
+        .executable(name: "receipt-printer-service", targets: ["receipt-printer-service"]),
+        .executable(name: "receipt-printer-settings", targets: ["receipt-printer-settings"]),
+        .executable(name: "receipt-printer-config", targets: ["receipt-printer-config"]),
+        .executable(name: "receipt-printer-updater", targets: ["receipt-printer-updater"]),
     ],
     targets: [
         .target(
-            name: "TMT88VCore",
+            name: "ReceiptPrinterCore",
             linkerSettings: [
                 .linkedFramework("IOKit"),
                 .linkedFramework("IOUSBHost"),
@@ -22,13 +24,15 @@ let package = Package(
                 .linkedFramework("ImageIO"),
             ]
         ),
-        .executableTarget(name: "tmt88v-diag", dependencies: ["TMT88VCore"]),
-        .executableTarget(name: "tmt88v-test", dependencies: ["TMT88VCore"]),
-        .executableTarget(name: "tmt88v-raster-test", dependencies: ["TMT88VCore"]),
-        .executableTarget(name: "tmt88v-service", dependencies: ["TMT88VCore"]),
-        .target(name: "TMT88VUpdater"),
-        .executableTarget(name: "tmt88v-updater", dependencies: ["TMT88VUpdater"]),
-        .testTarget(name: "TMT88VCoreTests", dependencies: ["TMT88VCore"]),
-        .testTarget(name: "TMT88VUpdaterTests", dependencies: ["TMT88VUpdater"]),
+        .executableTarget(name: "receipt-printer-diag", dependencies: ["ReceiptPrinterCore"]),
+        .executableTarget(name: "receipt-printer-test", dependencies: ["ReceiptPrinterCore"]),
+        .executableTarget(name: "receipt-printer-raster-test", dependencies: ["ReceiptPrinterCore"]),
+        .executableTarget(name: "receipt-printer-service", dependencies: ["ReceiptPrinterCore"]),
+        .executableTarget(name: "receipt-printer-settings", dependencies: ["ReceiptPrinterCore"]),
+        .executableTarget(name: "receipt-printer-config", dependencies: ["ReceiptPrinterCore"]),
+        .target(name: "ReceiptPrinterUpdater"),
+        .executableTarget(name: "receipt-printer-updater", dependencies: ["ReceiptPrinterUpdater"]),
+        .testTarget(name: "ReceiptPrinterCoreTests", dependencies: ["ReceiptPrinterCore"]),
+        .testTarget(name: "ReceiptPrinterUpdaterTests", dependencies: ["ReceiptPrinterUpdater"]),
     ]
 )

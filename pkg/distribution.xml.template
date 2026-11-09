@@ -1,16 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
-    <title>TM-T88V Compatibility Service</title>
-    <options customize="never" require-scripts="true" hostArchitectures="arm64"/>
+    <title>Receipt Printer (Apple Silicon)</title>
+    <options customize="always" require-scripts="true" hostArchitectures="arm64"/>
     <allowed-os-versions>
         <os-version min="@MIN_MACOS@"/>
     </allowed-os-versions>
     <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
     <choices-outline>
+        <line choice="model">
+            <line choice="model-tm-t88v"/>
+            <line choice="model-tm-t88vii"/>
+            <line choice="model-tm-m30ii"/>
+        </line>
         <line choice="default"/>
     </choices-outline>
-    <choice id="default" title="TM-T88V Compatibility Service" description="Native Apple Silicon print service and local print queue for the Epson TM-T88V.">
+    <!-- The picker choices are mutually exclusive (each is selected exactly when none of the others is) and preselect the model
+         that is already installed, so an upgrade keeps it. They are installed before the main package so that its postinstall
+         can read the selection. Add a model: a picker choice here, MODEL_IDS in scripts/config.sh, UpdaterConstants.knownModelIDs. -->
+    <choice id="model" title="Printer model" description="Choose the Epson printer you will connect." visible="true"/>
+    <choice id="model-tm-t88v" title="Epson TM-T88V" description="80 mm, 180 dpi (a 58 mm preset is available for this model)."
+            start_selected="!system.files.fileExistsAtPath('/Library/Application Support/ReceiptPrinter/current-model.tm-t88vii') &amp;&amp; !system.files.fileExistsAtPath('/Library/Application Support/ReceiptPrinter/current-model.tm-m30ii')"
+            selected="!(choices['model-tm-t88vii'].selected || choices['model-tm-m30ii'].selected)">
+        <pkg-ref id="@PKG_ID_PREFIX@.model.tm-t88v"/>
+    </choice>
+    <choice id="model-tm-t88vii" title="Epson TM-T88VII" description="80 mm, 180 dpi."
+            start_selected="system.files.fileExistsAtPath('/Library/Application Support/ReceiptPrinter/current-model.tm-t88vii')"
+            selected="!(choices['model-tm-t88v'].selected || choices['model-tm-m30ii'].selected)">
+        <pkg-ref id="@PKG_ID_PREFIX@.model.tm-t88vii"/>
+    </choice>
+    <choice id="model-tm-m30ii" title="Epson TM-m30II" description="80 mm, 203 dpi."
+            start_selected="system.files.fileExistsAtPath('/Library/Application Support/ReceiptPrinter/current-model.tm-m30ii')"
+            selected="!(choices['model-tm-t88v'].selected || choices['model-tm-t88vii'].selected)">
+        <pkg-ref id="@PKG_ID_PREFIX@.model.tm-m30ii"/>
+    </choice>
+    <choice id="default" title="Receipt Printer service" description="Native Apple Silicon print service and local print queue for supported Epson receipt printers." visible="false" start_selected="true">
         <pkg-ref id="@PKG_ID@"/>
     </choice>
     <pkg-ref id="@PKG_ID@" version="@VERSION@" onConclusion="none">component.pkg</pkg-ref>
+    <pkg-ref id="@PKG_ID_PREFIX@.model.tm-t88v" version="@VERSION@" onConclusion="none">picker-tm-t88v.pkg</pkg-ref>
+    <pkg-ref id="@PKG_ID_PREFIX@.model.tm-t88vii" version="@VERSION@" onConclusion="none">picker-tm-t88vii.pkg</pkg-ref>
+    <pkg-ref id="@PKG_ID_PREFIX@.model.tm-m30ii" version="@VERSION@" onConclusion="none">picker-tm-m30ii.pkg</pkg-ref>
 </installer-gui-script>

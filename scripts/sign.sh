@@ -1,8 +1,8 @@
 #!/bin/bash
-# Signs the tmt88v binaries with a Developer ID Application identity (hardened runtime + secure timestamp).
+# Signs the receipt-printer binaries with a Developer ID Application identity (hardened runtime + secure timestamp).
 #
 #   SIGNING_IDENTITY   required: certificate name or SHA-1 hash ("-" = ad-hoc, needs ALLOW_ADHOC=1, for dry runs only)
-#   BUNDLE_ID_PREFIX   identifier namespace (default com.belchuke.tmt88vcompat); see scripts/config.sh
+#   BUNDLE_ID_PREFIX   identifier namespace (default com.belchuke.receiptprinter); see scripts/config.sh
 #   DIST_DIR           directory holding the binaries (default dist)
 #   SIGN_KEYCHAIN      optional keychain path to search
 #   ENTITLEMENTS       optional entitlements plist (none by default; none are required)
@@ -29,5 +29,10 @@ for tool in "${TOOLS[@]}"; do
     echo "signing $DIST_DIR/$tool as $(signing_identifier "$tool")"
     codesign "${args[@]}" --identifier "$(signing_identifier "$tool")" "$DIST_DIR/$tool"
 done
+
+APP="$DIST_DIR/$APP_NAME.app"
+[[ -d "$APP" ]] || { echo "missing $APP (run scripts/build.sh first)"; exit 1; }
+echo "signing $APP as $APP_BUNDLE_ID"
+codesign "${args[@]}" --identifier "$APP_BUNDLE_ID" "$APP"
 
 ./scripts/verify-signing.sh

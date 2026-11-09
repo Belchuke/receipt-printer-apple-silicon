@@ -40,7 +40,7 @@ trap 'rm -rf "$EXPAND"' EXIT
 pkgutil --expand-full "$PKG" "$EXPAND/x" > /dev/null 2>&1 || fail "pkgutil --expand-full failed"
 payload="$(find "$EXPAND/x" -path '*Payload*' -type f | sed "s|^.*/Payload||" | sort)"
 echo "$payload" | sed 's/^/  /'
-for expected in "$SERVICE_BINARY_PATH" "$PLIST_PATH" "$UPDATER_BINARY_PATH" "$UPDATER_PLIST_PATH" "$SUPPORT_DIR/share/config.default.json" "$SUPPORT_DIR/bin/tmt88v-diag" "$SUPPORT_DIR/share/healthcheck.test" "$SUPPORT_DIR/uninstall.sh"; do
+for expected in "$SERVICE_BINARY_PATH" "$PLIST_PATH" "$UPDATER_BINARY_PATH" "$UPDATER_PLIST_PATH" "$SUPPORT_DIR/share/config.default.json" "$SUPPORT_DIR/bin/receipt-printer-diag" "$SUPPORT_DIR/share/healthcheck.test" "$SUPPORT_DIR/uninstall.sh"; do
     echo "$payload" | grep -qxF "$expected" || fail "payload missing $expected"
 done
 echo "$payload" | grep -qx "$SUPPORT_DIR/config.json" && fail "payload ships config.json, which would overwrite a customer's setting on upgrade"

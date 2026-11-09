@@ -51,6 +51,8 @@ if [[ "$canary" != "0" ]]; then
 fi
 log "service binary executes"
 
+apply_model_selection
+
 launchctl bootout "system/$LABEL" > /dev/null 2>&1 || true
 launchctl enable "system/$LABEL" > /dev/null 2>&1 || true
 launchctl bootstrap system "$PLIST" || fail_service "launchctl could not bootstrap $LABEL"
@@ -77,6 +79,8 @@ else
 fi
 lpadmin -p "$QUEUE" -E -v "$PRINTER_URI" -m everywhere -D "$QUEUE_DESCRIPTION" -o printer-is-shared=false \
     || fail "lpadmin could not create or update queue $QUEUE"
+
+add_settings_link
 
 verify_queue || fail "queue $QUEUE failed verification: $VERIFY_REASON"
 log "queue $QUEUE verified (device URI $(queue_device_uri), not shared)"
@@ -123,6 +127,8 @@ setup_updater() {
     fi
 }
 setup_updater || true
+
+open_settings_app
 
 state_set phase complete
 log "installation complete"
