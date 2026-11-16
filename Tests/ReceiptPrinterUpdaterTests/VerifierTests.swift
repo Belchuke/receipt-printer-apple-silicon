@@ -63,6 +63,7 @@ struct VerifierTests {
             ("com.belchuke.receiptprinter.model.tm-t88v", version),
             ("com.belchuke.receiptprinter.model.tm-t88vii", version),
             ("com.belchuke.receiptprinter.model.tm-m30ii", version),
+            ("com.belchuke.receiptprinter.model.tm-m30iii", version),
         ] }
         guard case .success(let (_, metadata)) = result else { Issue.record("expected acceptance: \(result)"); return }
         #expect(metadata.identifier == "com.belchuke.receiptprinter.pkg")

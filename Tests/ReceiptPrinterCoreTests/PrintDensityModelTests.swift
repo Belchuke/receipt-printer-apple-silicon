@@ -80,8 +80,12 @@ struct PrintDensityModelTests {
         #expect(!contains(TestReceipt.build(model: .tmT88V80mm), Self.densityCommand))
     }
 
-    @Test func registryHasAllThreePrinters() {
-        #expect(PrinterModel.registryIDs == ["tm-t88v", "tm-t88vii", "tm-m30ii"])
+    @Test func registryHasAllFourPrinters() {
+        #expect(PrinterModel.registryIDs == ["tm-t88v", "tm-t88vii", "tm-m30ii", "tm-m30iii"])
+        #expect(PrinterModel.named("tm-m30iii") == .tmM30III80mm)
+        #expect(PrinterModel.tmM30III80mm.matches(productName: "TM-m30III"))
+        #expect(!PrinterModel.tmM30II80mm.matches(productName: "TM-m30III"), "the II and III are different printers")
+        #expect(!PrinterModel.tmM30III80mm.matches(productName: "TM-m30II"))
         #expect(PrinterModel.named("TM-T88VII") == .tmT88VII80mm)
         #expect(PrinterModel.tmT88VII80mm.matches(productName: "TM-T88VII "))
         #expect(!PrinterModel.tmT88V80mm.matches(productName: "TM-T88VII"), "the two TM-T88 models must not match each other")

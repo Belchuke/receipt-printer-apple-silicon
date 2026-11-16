@@ -23,6 +23,13 @@ public final class EscPosEncoder {
         append(0x1D, 0x28, 0x4B, 0x02, 0x00, 0x31, value)
     }
 
+    /// GS ( K <fn 50>: select print speed. 1...17, where 1 is the slowest; 0 uses the printer's saved speed.
+    /// Slower printing gives each line more heating time. The meaning of each level differs between printers.
+    @discardableResult
+    public func printSpeed(_ value: UInt8) -> Self {
+        append(0x1D, 0x28, 0x4B, 0x02, 0x00, 0x32, value)
+    }
+
     @discardableResult
     public func align(_ alignment: EscPosAlignment) -> Self {
         append(0x1B, 0x61, alignment.rawValue)

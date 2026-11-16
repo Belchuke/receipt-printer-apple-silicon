@@ -11,6 +11,7 @@
             <line choice="model-tm-t88v"/>
             <line choice="model-tm-t88vii"/>
             <line choice="model-tm-m30ii"/>
+            <line choice="model-tm-m30iii"/>
         </line>
         <line choice="default"/>
     </choices-outline>
@@ -19,19 +20,24 @@
          can read the selection. Add a model: a picker choice here, MODEL_IDS in scripts/config.sh, UpdaterConstants.knownModelIDs. -->
     <choice id="model" title="Printer model" description="Choose the Epson printer you will connect." visible="true"/>
     <choice id="model-tm-t88v" title="Epson TM-T88V" description="80 mm, 180 dpi (a 58 mm preset is available for this model)."
-            start_selected="!system.files.fileExistsAtPath('/Library/Application Support/ReceiptPrinter/current-model.tm-t88vii') &amp;&amp; !system.files.fileExistsAtPath('/Library/Application Support/ReceiptPrinter/current-model.tm-m30ii')"
-            selected="!(choices['model-tm-t88vii'].selected || choices['model-tm-m30ii'].selected)">
+            start_selected="!system.files.fileExistsAtPath('/Library/Application Support/ReceiptPrinter/current-model.tm-t88vii') &amp;&amp; !system.files.fileExistsAtPath('/Library/Application Support/ReceiptPrinter/current-model.tm-m30ii') &amp;&amp; !system.files.fileExistsAtPath('/Library/Application Support/ReceiptPrinter/current-model.tm-m30iii')"
+            selected="!(choices['model-tm-t88vii'].selected || choices['model-tm-m30ii'].selected || choices['model-tm-m30iii'].selected)">
         <pkg-ref id="@PKG_ID_PREFIX@.model.tm-t88v"/>
     </choice>
     <choice id="model-tm-t88vii" title="Epson TM-T88VII" description="80 mm, 180 dpi."
             start_selected="system.files.fileExistsAtPath('/Library/Application Support/ReceiptPrinter/current-model.tm-t88vii')"
-            selected="!(choices['model-tm-t88v'].selected || choices['model-tm-m30ii'].selected)">
+            selected="!(choices['model-tm-t88v'].selected || choices['model-tm-m30ii'].selected || choices['model-tm-m30iii'].selected)">
         <pkg-ref id="@PKG_ID_PREFIX@.model.tm-t88vii"/>
     </choice>
     <choice id="model-tm-m30ii" title="Epson TM-m30II" description="80 mm, 203 dpi."
             start_selected="system.files.fileExistsAtPath('/Library/Application Support/ReceiptPrinter/current-model.tm-m30ii')"
-            selected="!(choices['model-tm-t88v'].selected || choices['model-tm-t88vii'].selected)">
+            selected="!(choices['model-tm-t88v'].selected || choices['model-tm-t88vii'].selected || choices['model-tm-m30iii'].selected)">
         <pkg-ref id="@PKG_ID_PREFIX@.model.tm-m30ii"/>
+    </choice>
+    <choice id="model-tm-m30iii" title="Epson TM-m30III" description="80 mm, 203 dpi."
+            start_selected="system.files.fileExistsAtPath('/Library/Application Support/ReceiptPrinter/current-model.tm-m30iii')"
+            selected="!(choices['model-tm-t88v'].selected || choices['model-tm-t88vii'].selected || choices['model-tm-m30ii'].selected)">
+        <pkg-ref id="@PKG_ID_PREFIX@.model.tm-m30iii"/>
     </choice>
     <choice id="default" title="Receipt Printer service" description="Native Apple Silicon print service and local print queue for supported Epson receipt printers." visible="false" start_selected="true">
         <pkg-ref id="@PKG_ID@"/>
@@ -40,4 +46,5 @@
     <pkg-ref id="@PKG_ID_PREFIX@.model.tm-t88v" version="@VERSION@" onConclusion="none">picker-tm-t88v.pkg</pkg-ref>
     <pkg-ref id="@PKG_ID_PREFIX@.model.tm-t88vii" version="@VERSION@" onConclusion="none">picker-tm-t88vii.pkg</pkg-ref>
     <pkg-ref id="@PKG_ID_PREFIX@.model.tm-m30ii" version="@VERSION@" onConclusion="none">picker-tm-m30ii.pkg</pkg-ref>
+    <pkg-ref id="@PKG_ID_PREFIX@.model.tm-m30iii" version="@VERSION@" onConclusion="none">picker-tm-m30iii.pkg</pkg-ref>
 </installer-gui-script>

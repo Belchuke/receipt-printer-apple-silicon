@@ -11,6 +11,8 @@ public struct RasterOptions: Sendable {
     public var scale: ScaleMode = .fit
     public var threshold: UInt8 = 128
     public var maxHeight = 32_768
+    /// Darkening tone curve before dithering; 1 leaves the image unchanged (see `GrayImage.applyingGamma`).
+    public var gamma = 1.0
 
     public init() {}
 }
@@ -33,7 +35,7 @@ public enum RasterProcessor {
 
     public static func process(_ image: CGImage, model: PrinterModel, options: RasterOptions = RasterOptions()) throws -> MonoBitmap {
         let gray = try renderGray(image, canvasWidth: model.dotsPerLine, options: options)
-        return Dithering.apply(gray, mode: options.dither, threshold: options.threshold)
+        return Dithering.apply(gray.applyingGamma(options.gamma), mode: options.dither, threshold: options.threshold)
     }
 
     public static func process(gray: GrayImage, model: PrinterModel, options: RasterOptions = RasterOptions()) throws -> MonoBitmap {
@@ -53,7 +55,7 @@ public enum RasterProcessor {
                 with: gray.pixels[(y * gray.width)..<((y + 1) * gray.width)]
             )
         }
-        return Dithering.apply(canvas, mode: options.dither, threshold: options.threshold)
+        return Dithering.apply(canvas.applyingGamma(options.gamma), mode: options.dither, threshold: options.threshold)
     }
 
     public static func cgImage(_ gray: GrayImage) -> CGImage? {

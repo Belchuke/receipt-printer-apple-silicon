@@ -28,6 +28,7 @@ public final class JobManager: @unchecked Sendable {
     private let lock = NSLock()
     private let service: PrintService
     private let log: ServiceLog
+    private let failureReporter: FailureReporting?
     private let queue = DispatchQueue(label: "receiptprinter.jobs")
     private let retainedJobs: Int
     private var jobs: [Int: PrintJob] = [:]
@@ -35,9 +36,10 @@ public final class JobManager: @unchecked Sendable {
     private var nextID = 1
     private var cancelled = Set<Int>()
 
-    public init(service: PrintService, log: ServiceLog, retainedJobs: Int = 100) {
+    public init(service: PrintService, log: ServiceLog, retainedJobs: Int = 100, failureReporter: FailureReporting? = nil) {
         self.service = service
         self.log = log
+        self.failureReporter = failureReporter
         self.retainedJobs = retainedJobs
     }
 
@@ -116,6 +118,13 @@ public final class JobManager: @unchecked Sendable {
             log.event("job_failed", [
                 "job_id": jobID, "format": job.format, "error": "\(error)", "total_ms": elapsed(since: begin), "requested": job.requested,
             ])
+            if let failureReporter {
+                let saved = failureReporter.report(FailedJob(
+                    jobID: jobID, format: job.format, bytes: document.count, error: "\(error)",
+                    requested: job.requested, milliseconds: elapsed(since: begin)
+                ))
+                log.event("failure_report", ["job_id": jobID, "saved": saved != nil, "path": saved ?? ""])
+            }
         }
     }
 

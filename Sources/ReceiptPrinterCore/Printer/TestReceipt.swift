@@ -5,6 +5,7 @@ public enum TestReceipt {
         let encoder = EscPosEncoder()
         encoder.initialize()
         if let density = model.effectivePrintDensity(userChoice: nil) { encoder.printDensity(density) }
+        if let speed = model.effectivePrintSpeed { encoder.printSpeed(speed) }
         encoder
             .align(.center)
             .bold(true)

@@ -8,11 +8,12 @@ usage: receipt-printer-service [options]
 
   --port N          loopback TCP port (default 8632; 0 picks a free port)
   --sink PATH       write ESC/POS to PATH instead of USB (a directory gets job-N.escpos); never touches the printer
-  --model NAME      printer model: tm-t88v (default) | tm-t88vii | tm-m30ii
+  --model NAME      printer model: tm-t88v (default) | tm-t88vii | tm-m30ii | tm-m30iii
   --paper 80|58     paper width preset, TM-T88V only (default 80)
   --name NAME       printer name advertised over IPP (default "Epson Receipt Printer")
   --serial SERIAL   use the printer with this USB serial
   --log-file PATH   also write JSON-line logs to PATH (rotated at 1 MB, 3 files kept)
+  --no-failure-reports  do not write a report to Documents/Receipt Printer Logs when a print fails
   --quiet           do not echo log lines to stderr (use with --log-file when run by launchd)
   --settings-dir D  directory holding printer.json and the logo (default /Library/Application Support/ReceiptPrinter)
   --max-job-mb N    reject documents larger than N MB (default 64)
@@ -31,6 +32,7 @@ var serial: String?
 var logPath: String?
 var quiet = false
 var settingsDir: String?
+var failureReports = true
 var modelFromFlag = false
 
 var remaining = Array(CommandLine.arguments.dropFirst())
@@ -60,6 +62,7 @@ while !remaining.isEmpty {
         guard let selected = PrinterModel.named(value()) else { fail("--model must be one of: \(PrinterModel.registryIDs.joined(separator: ", "))") }
         config.model = selected
         modelFromFlag = true
+    case "--no-failure-reports": failureReports = false
     case "--settings-dir": settingsDir = value()
     case "--serial": serial = value()
     case "--log-file": logPath = value()
@@ -80,8 +83,25 @@ var printService = PrintService(model: config.model, output: output)
 let activeModel = config.model
 printService.logo = { LogoRenderer.logo(model: activeModel, store: store) }
 printService.density = { store.effectivePrintDensity(for: activeModel) }
-let jobs = JobManager(service: printService, log: log)
-let server = IppHTTPServer(config: config, handler: IppRequestHandler(config: config, jobs: jobs, log: log), log: log)
+let logDirectory = logPath.map { URL(fileURLWithPath: $0).deletingLastPathComponent() } ?? URL(fileURLWithPath: "/Library/Logs/ReceiptPrinter")
+let serviceLogURL = logPath.map { URL(fileURLWithPath: $0) }
+let failureLog: FailureReporting? = failureReports ? FailureLog(
+    model: activeModel,
+    store: store,
+    fallback: logDirectory.appendingPathComponent("failures"),
+    version: {
+        let file = store.directory.appendingPathComponent("share/VERSION")
+        return ((try? String(contentsOf: file, encoding: .utf8)) ?? "unknown").trimmingCharacters(in: .whitespacesAndNewlines)
+    },
+    usbDevices: {
+        UsbDiscovery.devices(vendorID: activeModel.usbVendorID, readEndpoints: false).map {
+            SeenUsbDevice(productName: $0.productName, vendorID: $0.vendorID, productID: $0.productID, mode: $0.usbMode)
+        }
+    },
+    logTail: { serviceLogURL.map { FailureLog.tail(of: $0, include: FailureLog.isUsefulLogLine) } ?? [] }
+) : nil
+let jobs = JobManager(service: printService, log: log, failureReporter: failureLog)
+let server = IppHTTPServer(config: config, handler: IppRequestHandler(config: config, jobs: jobs, log: log, failureReporter: failureLog), log: log)
 
 do {
     try server.start()
@@ -91,6 +111,17 @@ do {
 }
 
 config.port = server.port
+
+// Say at start-up whether the plugged-in printer is the one this service is set up for. A mismatch (the wrong model chosen in
+// the installer) otherwise only shows when the first print fails.
+let seenAtStart = UsbDiscovery.devices(vendorID: activeModel.usbVendorID, readEndpoints: false).map {
+    SeenUsbDevice(productName: $0.productName, vendorID: $0.vendorID, productID: $0.productID, mode: $0.usbMode)
+}
+for check in PrinterCheck.classify(model: activeModel, devices: seenAtStart) {
+    var fields: [String: Any] = ["result": check.code, "configured": activeModel.name, "seen": seenAtStart.map(\.summary)]
+    if case .wrongModel(_, let shouldBe) = check { fields["should_be"] = shouldBe }
+    log.event("printer_check", fields)
+}
 log.event("listening", [
     "addresses": server.boundAddresses,
     "printer_uri": config.printerURI(),

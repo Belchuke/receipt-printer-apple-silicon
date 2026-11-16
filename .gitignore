@@ -21,3 +21,5 @@ xcuserdata/
 
 # Local logs
 *.log
+
+.env

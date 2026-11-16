@@ -39,6 +39,19 @@ final class SettingsViewModel: ObservableObject {
         refreshPreview()
     }
 
+    /// `~/Documents/Receipt Printer Logs`: where a failed print leaves its report.
+    var logsFolder: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Documents")
+            .appendingPathComponent(FailureLog.folderName)
+    }
+
+    func openLogsFolder() {
+        // Created if it does not exist yet so Finder always has something to show.
+        try? FileManager.default.createDirectory(at: logsFolder, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(logsFolder)
+    }
+
     func chooseImage() {
         let panel = NSOpenPanel()
         panel.title = "Choose a logo"

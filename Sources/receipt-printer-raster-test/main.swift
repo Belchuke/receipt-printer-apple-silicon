@@ -14,9 +14,11 @@ usage: receipt-printer-raster-test (IMAGE | --pattern) [options]
   --scale MODE          fit (default, shrink only, centered) | actual-size (error if too wide)
   --threshold N         black/white cutoff 1-255 (default 128)
   --paper 80|58         paper width preset (default 80)
-  --model NAME          tm-t88v (default) | tm-t88vii | tm-m30ii
+  --model NAME          tm-t88v (default) | tm-t88vii | tm-m30ii | tm-m30iii
   --serial SERIAL       use the printer with this USB serial
   --density N           print density 0-255 (GS ( K 49): 0 standard, 1-127 stronger, 128-255 paler; default: the model default, if it has one
+  --speed N             print speed 1-17 (GS ( K 50): 1 slowest and usually darkest; default: the model default, if it has one
+  --gamma G             darken before dithering: 1 = off, 1.5-3 = darker greys and text edges; default: the model default
   --no-cut              do not cut
   --preview FILE        write the final 1-bit bitmap as PNG
   --dry-run FILE        write the ESC/POS bytes to FILE instead of printing
@@ -41,6 +43,8 @@ var previewPath: String?
 var dryRunPath: String?
 var noCut = false
 var density: UInt8?
+var speed: UInt8?
+var gammaOverride: Double?
 var decodePath: String?
 
 var remaining = Array(CommandLine.arguments.dropFirst())
@@ -83,6 +87,12 @@ while !remaining.isEmpty {
     case "--density":
         guard let n = UInt8(value()) else { fail("--density must be 0-255", code: 2) }
         density = n
+    case "--speed":
+        guard let n = UInt8(value()), (1...17).contains(n) else { fail("--speed must be 1-17", code: 2) }
+        speed = n
+    case "--gamma":
+        guard let g = Double(value()), g >= 1, g <= 5 else { fail("--gamma must be between 1 and 5", code: 2) }
+        gammaOverride = g
     case "--no-cut": noCut = true
     case "--preview": previewPath = value()
     case "--dry-run": dryRunPath = value()
@@ -106,6 +116,7 @@ if let decodePath {
     } catch { fail("decode failed: \(error)", code: 1) }
 }
 if noCut { model.cutMode = .none }
+options.gamma = gammaOverride ?? model.defaultGamma
 guard usePattern != (imagePath != nil) else { fail("give exactly one of IMAGE or --pattern\n\(usage)", code: 2) }
 
 let totalStart = DispatchTime.now()
@@ -125,7 +136,7 @@ do {
     let bitmap = try RasterProcessor.process(source, model: model, options: options)
     let processMs = milliseconds(since: processStart)
 
-    let payload = try RasterReceipt.build(bitmap: bitmap, model: model, density: density ?? model.effectivePrintDensity(userChoice: nil))
+    let payload = try RasterReceipt.build(bitmap: bitmap, model: model, density: density ?? model.effectivePrintDensity(userChoice: nil), speed: speed ?? model.effectivePrintSpeed)
 
     print("source:    \(source.width)x\(source.height) px (\(source.width * source.height * 4) bytes decoded RGBA-equivalent)")
     print("bitmap:    \(bitmap.width)x\(bitmap.height) dots, \(bitmap.rowBytes) bytes/row, \(bitmap.data.count) bytes packed")

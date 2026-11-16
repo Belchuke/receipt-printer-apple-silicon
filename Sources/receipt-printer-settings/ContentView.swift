@@ -38,6 +38,8 @@ struct ContentView: View {
             }
             Divider()
             logoSection
+            Divider()
+            troubleshootingSection
             if let message = model.message {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
@@ -82,6 +84,17 @@ struct ContentView: View {
                     .controlSize(.small)
                     .disabled(model.densityIsDefault || !model.canWrite)
             }
+        }
+    }
+
+    private var troubleshootingSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("If a print fails").font(.headline)
+            Text("A short report is saved to Documents > \(FailureLog.folderName). It holds the error and printer details, never what was printed. Send it to support.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Open Logs Folder") { model.openLogsFolder() }
         }
     }
 

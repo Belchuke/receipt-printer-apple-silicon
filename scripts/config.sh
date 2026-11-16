@@ -40,7 +40,7 @@ PKG_FILE_BASENAME="ReceiptPrinter-$VERSION"
 
 # Printer models offered by the installer, one picker component package each. Keep in sync with PrinterModel.registry,
 # UpdaterConstants.knownModelIDs and the choices in pkg/distribution.xml.template.
-MODEL_IDS=(tm-t88v tm-t88vii tm-m30ii)
+MODEL_IDS=(tm-t88v tm-t88vii tm-m30ii tm-m30iii)
 MODEL_PKG_PREFIX="$BUNDLE_ID_PREFIX.model"
 
 # The settings app (receipt logo). The printer queue's "Open Printer Utility" button opens SETTINGS_URL; macOS passes the

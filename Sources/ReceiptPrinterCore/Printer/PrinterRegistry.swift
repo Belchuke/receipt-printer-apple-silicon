@@ -5,6 +5,7 @@ public extension PrinterModel {
         ("tm-t88v", .tmT88V80mm),
         ("tm-t88vii", .tmT88VII80mm),
         ("tm-m30ii", .tmM30II80mm),
+        ("tm-m30iii", .tmM30III80mm),
     ]
 
     static var registryIDs: [String] { registry.map(\.id) }

@@ -99,3 +99,30 @@ struct DitheringTests {
         }
     }
 }
+
+struct GammaTests {
+    @Test func gammaOneLeavesTheImageUntouched() {
+        let image = GrayImage(width: 4, height: 1, pixels: [0, 64, 128, 255])
+        #expect(image.applyingGamma(1.0) == image)
+        #expect(image.applyingGamma(0.5) == image, "a value below 1 never lightens")
+    }
+
+    @Test func gammaDarkensGreysButKeepsBlackAndWhite() {
+        let image = GrayImage(width: 4, height: 1, pixels: [0, 64, 128, 255])
+        let darker = image.applyingGamma(2.0)
+        #expect(darker.pixels[0] == 0 && darker.pixels[3] == 255)
+        #expect(darker.pixels[1] < 64 && darker.pixels[2] < 128)
+        #expect(darker.pixels[2] == 64, "128/255 squared is about 0.25, so 64")
+        #expect(image.applyingGamma(3.0).pixels[2] < darker.pixels[2], "a larger gamma is darker still")
+    }
+
+    @Test func gammaPrintsMoreBlackDots() {
+        let grey = GrayImage(width: 64, height: 64, fill: 180)
+        func blackDots(_ gamma: Double) -> Int {
+            let bitmap = Dithering.apply(grey.applyingGamma(gamma), mode: .floydSteinberg, threshold: 128)
+            return (0..<bitmap.height).reduce(0) { total, y in total + (0..<bitmap.width).filter { bitmap.isBlack(x: $0, y: y) }.count }
+        }
+        #expect(blackDots(2.0) > blackDots(1.0))
+        #expect(blackDots(3.0) > blackDots(2.0))
+    }
+}

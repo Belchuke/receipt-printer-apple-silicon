@@ -547,6 +547,14 @@ check "picker: TM-T88VII marker written" test -f "$RECEIPT_PRINTER_ROOT$SUPPORT_
 run_install_with_models tm-m30ii; check "picker: switching from TM-T88VII to TM-m30II" equals "$(model_in_settings)" "tm-m30ii"
 check "picker: the TM-T88VII marker is gone after switching" test ! -e "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/current-model.tm-t88vii"
 
+new_fixture pick-m30iii
+run_install_with_models tm-m30iii; check "picker: TM-m30III install succeeds" equals "$?" "0"
+check "picker: TM-m30III stored in printer.json" equals "$(model_in_settings)" "tm-m30iii"
+check "picker: TM-m30III marker written" test -f "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/current-model.tm-m30iii"
+check "picker: TM-m30II and TM-m30III stay separate models" bash -c "[[ ! -e '$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/current-model.tm-m30ii' ]]"
+run_install_with_models tm-m30ii; check "picker: switching TM-m30III to TM-m30II" equals "$(model_in_settings)" "tm-m30ii"
+check "picker: the TM-m30III marker is gone after switching" test ! -e "$RECEIPT_PRINTER_ROOT$SUPPORT_DIR/current-model.tm-m30iii"
+
 new_fixture pick-default
 run_install_with_models; check "picker: nothing selected still installs" equals "$?" "0"
 check "picker: first install defaults to the TM-T88V" equals "$(model_in_settings)" "tm-t88v"

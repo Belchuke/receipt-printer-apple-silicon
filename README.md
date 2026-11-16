@@ -54,10 +54,11 @@ Applications that already use the built-in macOS printing system do not need to 
 | Epson TM-T88V | 80 mm (58 mm preset) | 180 DPI, 512 dots/line | Tested on hardware |
 | Epson TM-T88VII | 80 mm | 180 DPI, 512 dots/line | Tested on hardware (USB, status query, raster printing, print darkness) |
 | Epson TM-m30II | 80 mm | 203 DPI, 576 dots/line | Tested on hardware (USB, status query and raster printing) |
+| Epson TM-m30III | 80 mm | 203 DPI, 576 dots/line | Tested on hardware (USB, status query, raster printing, tuned print darkness) |
 
 Other Epson ESC/POS printers (for example the TM-T88IV) are untested. Reports and USB diagnostics from other models are welcome.
 
-The installer asks which printer you have. The choice is stored in `printer.json` and read by the service. To change it later, run `receipt-printer-config set-model tm-t88vii` (or `tm-t88v`, `tm-m30ii`) and restart the service, or run the installer again. The tools below also take `--model tm-t88v`, `--model tm-t88vii` or `--model tm-m30ii`.
+The installer asks which printer you have. The choice is stored in `printer.json` and read by the service. To change it later, run `receipt-printer-config set-model tm-m30iii` (or `tm-t88v`, `tm-t88vii`, `tm-m30ii`) and restart the service, or run the installer again. The tools below also take `--model tm-t88v`, `--model tm-t88vii`, `--model tm-m30ii` or `--model tm-m30iii`.
 
 ## Requirements
 
@@ -108,6 +109,14 @@ Change it in the settings app (the **Print darkness** slider, shown only for pri
 
 `0` is the printer's standard darkness and `127` the strongest. Lower it if large black areas look smeared.
 
+The **TM-m30III** printed grey and thin out of the box too. It is tuned on hardware with three settings working together, sent or applied for you:
+
+- print density 127 (adjustable like the TM-T88VII's),
+- print speed level 6 (`GS ( K`, function 50), and
+- a gamma 2.2 tone curve that makes greys and the edges of small text blacker before the page is turned into dots. It applies to pages and to the logo alike.
+
+A stronger curve (2.6) made small text clog, and the slowest speed was not needed. The TM-T88V, TM-T88VII and TM-m30II are left as they were: no speed command and no tone curve.
+
 ## Logo
 
 An image can be printed on every receipt, like the logo option in Epson's old driver. By default it is printed at the **top**, above the receipt. It can be moved to the **bottom**, just before the cut. The image is scaled to the paper width and dithered to black and white.
@@ -140,6 +149,22 @@ The same settings are available from a terminal:
 
 A missing or unreadable logo never blocks a receipt.
 
+## When a print fails
+
+Every failed print job leaves a short text report in **Documents > Receipt Printer Logs** of the person logged in at the Mac. Send it to support. The settings app has an **Open Logs Folder** button for it.
+
+Each report also has a **Printer check** line that says whether the printer plugged in is the model the service is set up for. The most common reason for "nothing prints" is the wrong model chosen in the installer. The check names the printer that is really connected and how to fix it: run the installer again and choose that printer, or run `receipt-printer-config set-model <model>` and then restart the service. It also notices when no Epson printer is visible at all, which points to the cable, the power switch or the power adapter. The service writes the same check to its own log when it starts (`printer_check`).
+
+A report holds the error message, the time, the printer model and settings, the software and macOS versions, the Epson USB devices the Mac can see at that moment, and the last lines of the service's own log. It never contains what was printed, the job's name or the user's name, and it has no file paths. The newest 50 reports are kept. If the Documents folder can't be written (nobody is logged in, or macOS blocks it), the report is saved in `/Library/Logs/ReceiptPrinter/failures` instead. Use `receipt-printer-service --no-failure-reports` to turn it off.
+
+## Restarting the service
+
+The print service runs in the background as the launchd job `com.belchuke.receiptprinter.service`. Settings such as the logo apply to the next print without a restart, but changing the printer model needs one. Any of these works:
+
+- Run the installer again and choose the printer. This is the easiest way.
+- Restart the Mac.
+- In Terminal: `sudo launchctl kickstart -k system/com.belchuke.receiptprinter.service`
+
 ## Automatic Updates
 
 Starting with v0.2.0, the compatibility layer updates itself automatically in the background.
@@ -150,7 +175,7 @@ The updater verifies the package signature, Apple Developer team, package identi
 
 No update prompts or user interaction are required.
 
-`ReceiptPrinter.pkg` in each GitHub release is reserved for the automatic updater. For manual installation, use the versioned package such as `ReceiptPrinter-0.3.0.pkg`.
+`ReceiptPrinter.pkg` in each GitHub release is reserved for the automatic updater. For manual installation, use the versioned package such as `ReceiptPrinter-0.3.1.pkg`.
 
 ## Building from source
 
@@ -180,7 +205,7 @@ dist/
 dist/receipt-printer-diag --status
 ```
 
-Displays the connected printer's USB information and status. Add `--model tm-t88vii` or `--model tm-m30ii` for those printers.
+Displays the connected printer's USB information and status. Add `--model tm-t88vii`, `--model tm-m30ii` or `--model tm-m30iii` for those printers.
 
 ### Direct print test
 

@@ -30,6 +30,7 @@ install -m 755 "$DIST_DIR/receipt-printer-config" "$ROOT$SUPPORT_DIR/bin/receipt
 [[ -d "$DIST_DIR/$APP_NAME.app" ]] || { echo "missing $DIST_DIR/$APP_NAME.app (run scripts/build.sh first)"; exit 1; }
 mkdir -p "$ROOT/Applications"
 ditto "$DIST_DIR/$APP_NAME.app" "$ROOT$APP_PATH"
+install -m 644 VERSION "$ROOT$SUPPORT_DIR/share/VERSION"
 install -m 644 pkg/share/healthcheck.test "$ROOT$SUPPORT_DIR/share/healthcheck.test"
 install -m 644 pkg/share/config.default.json "$ROOT$SUPPORT_DIR/share/config.default.json"
 install -m 755 scripts/uninstall.sh "$ROOT$SUPPORT_DIR/uninstall.sh"

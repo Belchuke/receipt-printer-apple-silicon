@@ -42,6 +42,12 @@ public enum EscPosRasterDecoder {
                 guard i + 3 < bytes.count else { throw EscPosDecodeError.truncated(offset: i) }
                 flush(cut: true)
                 i += 4
+            case (0x1D, 0x28):
+                // GS ( x pL pH <data>: density (K 49) and speed (K 50) settings. They have no pixels; skip them.
+                guard i + 4 < bytes.count else { throw EscPosDecodeError.truncated(offset: i) }
+                let length = Int(bytes[i + 3]) | Int(bytes[i + 4]) << 8
+                guard i + 5 + length <= bytes.count else { throw EscPosDecodeError.truncated(offset: i) }
+                i += 5 + length
             case (0x1D, 0x76):
                 guard i + 7 < bytes.count, bytes[i + 2] == 0x30 else { throw EscPosDecodeError.truncated(offset: i) }
                 let bandRowBytes = Int(bytes[i + 4]) | Int(bytes[i + 5]) << 8

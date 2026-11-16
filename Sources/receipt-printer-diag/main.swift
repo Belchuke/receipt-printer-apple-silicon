@@ -6,7 +6,7 @@ setlinebuf(stdout)
 let usage = """
 usage: receipt-printer-diag [--model NAME] [--all] [--status] [--no-open]
 
-  --model NAME  printer model: tm-t88v (default) | tm-t88vii | tm-m30ii
+  --model NAME  printer model: tm-t88v (default) | tm-t88vii | tm-m30ii | tm-m30iii
   --all       list every USB device from the model's vendor, not only matches for the selected model
   --status    query real-time printer status (DLE EOT) over bulk IN
   --no-open   read IORegistry only; do not open interfaces (endpoints unavailable)

@@ -27,7 +27,7 @@ public enum LogoRenderer {
     /// The stored logo alone (no gap), even while it is switched off.
     public static func previewBitmap(model: PrinterModel, store: SettingsStore) -> MonoBitmap? {
         guard let image = try? ImageDecoder.load(url: store.logoURL) else { return nil }
-        return try? RasterProcessor.process(image, model: model)
+        return try? RasterProcessor.process(image, model: model, options: model.rasterOptions)
     }
 
     /// The stored logo with the configured gap on the receipt side, as it would print, even while the logo is off.

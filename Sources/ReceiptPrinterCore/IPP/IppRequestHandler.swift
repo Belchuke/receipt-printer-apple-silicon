@@ -8,10 +8,21 @@ public final class IppRequestHandler: @unchecked Sendable {
     private let log: ServiceLog
     private let startTime = Date()
 
-    public init(config: IppServerConfig, jobs: JobManager, log: ServiceLog) {
+    private let failureReporter: FailureReporting?
+
+    public init(config: IppServerConfig, jobs: JobManager, log: ServiceLog, failureReporter: FailureReporting? = nil) {
         self.storedConfig = config
         self.jobs = jobs
         self.log = log
+        self.failureReporter = failureReporter
+    }
+
+    /// A print request turned away at the door (wrong format, too big, empty): no job exists, so no job report would follow.
+    private func reportRejected(_ operation: IppGroup, document: Data, reason: String) {
+        guard let failureReporter else { return }
+        let declared = operation["document-format"]?.values.first?.string ?? "not declared"
+        let saved = failureReporter.report(FailedJob(jobID: 0, format: declared, bytes: document.count, error: "print request rejected: \(reason)"))
+        log.event("failure_report", ["job_id": 0, "saved": saved != nil, "path": saved ?? "", "rejected": true])
     }
 
     func updatePort(_ port: UInt16) {
@@ -112,9 +123,18 @@ public final class IppRequestHandler: @unchecked Sendable {
 
         case IppOperation.printJob:
             if let failure = checkPrinterURI(operation) { return reply(failure.0, failure.1) }
-            guard !document.isEmpty else { return reply(IppStatus.badRequest, "no document data") }
-            guard document.count <= config.maxJobBytes else { return reply(IppStatus.requestEntityTooLarge, "document exceeds \(config.maxJobBytes) bytes") }
-            if let failure = checkFormat(operation, document: document) { return reply(failure.status, failure.message, extra: failure.groups) }
+            guard !document.isEmpty else {
+                reportRejected(operation, document: document, reason: "no document data")
+                return reply(IppStatus.badRequest, "no document data")
+            }
+            guard document.count <= config.maxJobBytes else {
+                reportRejected(operation, document: document, reason: "document exceeds \(config.maxJobBytes) bytes")
+                return reply(IppStatus.requestEntityTooLarge, "document exceeds \(config.maxJobBytes) bytes")
+            }
+            if let failure = checkFormat(operation, document: document) {
+                reportRejected(operation, document: document, reason: failure.message)
+                return reply(failure.status, failure.message, extra: failure.groups)
+            }
             let format = RasterFormat.detect(document)?.rawValue ?? "unknown"
             let name = operation["job-name"]?.values.first?.string ?? "Untitled"
             let requested = Self.requestedAttributes([operation, request.group(IppTag.jobGroup)])

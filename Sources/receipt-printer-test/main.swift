@@ -6,7 +6,7 @@ setlinebuf(stdout)
 let usage = """
 usage: receipt-printer-test [--model NAME] [--serial SERIAL] [--paper 80|58] [--no-cut] [--skip-status] [--dry-run FILE]
 
-  --model NAME      printer model: tm-t88v (default) | tm-t88vii | tm-m30ii
+  --model NAME      printer model: tm-t88v (default) | tm-t88vii | tm-m30ii | tm-m30iii
   --serial SERIAL   print on the printer with this USB serial number (default: first found)
   --paper 80|58     paper width preset (default: 80)
   --no-cut          do not send the cut command

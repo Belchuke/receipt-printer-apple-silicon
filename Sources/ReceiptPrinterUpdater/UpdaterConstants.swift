@@ -5,7 +5,7 @@ public enum UpdaterConstants {
     /// The installer ships one tiny component per printer model so the customize screen can offer a choice.
     /// Only these exact identifiers are accepted next to the main package. Keep in sync with MODEL_IDS in scripts/config.sh.
     public static let modelPackageIdentifierPrefix = "com.belchuke.receiptprinter.model."
-    public static let knownModelIDs = ["tm-t88v", "tm-t88vii", "tm-m30ii"]
+    public static let knownModelIDs = ["tm-t88v", "tm-t88vii", "tm-m30ii", "tm-m30iii"]
     public static var allowedModelPackageIdentifiers: Set<String> { Set(knownModelIDs.map { modelPackageIdentifierPrefix + $0 }) }
     public static let requiredTeamID = "P3WL6DBK59"
     public static let officialUpdateURL = URL(string: "https://github.com/Belchuke/receipt-printer-apple-silicon/releases/latest/download/ReceiptPrinter.pkg")!

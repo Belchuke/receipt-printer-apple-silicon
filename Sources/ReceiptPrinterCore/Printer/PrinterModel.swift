@@ -21,6 +21,13 @@ public struct PrinterModel: Sendable, Equatable {
     public var supportsPrintDensity: Bool
     /// Density sent when the user has not chosen one (nil = leave the printer's own setting alone).
     public var defaultPrintDensity: UInt8?
+    /// True only for printers verified to accept GS ( K 50 (select print speed).
+    public var supportsPrintSpeed: Bool
+    /// Print speed sent before every page (1...17, 1 = slowest); nil sends nothing. Slower printing heats each line longer.
+    public var defaultPrintSpeed: UInt8?
+    /// Tone curve applied to pages and the logo before dithering (1 = none). Greys and anti-aliased text edges become
+    /// blacker, so more dots print, for printers whose head leaves grey, thin text.
+    public var defaultGamma: Double
 
     public init(
         name: String,
@@ -33,7 +40,10 @@ public struct PrinterModel: Sendable, Equatable {
         cutMode: CutMode,
         cutFeedUnits: Int,
         supportsPrintDensity: Bool = false,
-        defaultPrintDensity: UInt8? = nil
+        defaultPrintDensity: UInt8? = nil,
+        supportsPrintSpeed: Bool = false,
+        defaultPrintSpeed: UInt8? = nil,
+        defaultGamma: Double = 1.0
     ) {
         self.name = name
         self.usbVendorID = usbVendorID
@@ -46,6 +56,21 @@ public struct PrinterModel: Sendable, Equatable {
         self.cutFeedUnits = cutFeedUnits
         self.supportsPrintDensity = supportsPrintDensity
         self.defaultPrintDensity = defaultPrintDensity
+        self.supportsPrintSpeed = supportsPrintSpeed
+        self.defaultPrintSpeed = defaultPrintSpeed
+        self.defaultGamma = defaultGamma
+    }
+
+    /// The print speed to send for this printer: nil when unsupported or unset.
+    public var effectivePrintSpeed: UInt8? {
+        supportsPrintSpeed ? defaultPrintSpeed : nil
+    }
+
+    /// Raster conversion options tuned for this printer.
+    public var rasterOptions: RasterOptions {
+        var options = RasterOptions()
+        options.gamma = defaultGamma
+        return options
     }
 
     public static let maxPrintDensity = 127

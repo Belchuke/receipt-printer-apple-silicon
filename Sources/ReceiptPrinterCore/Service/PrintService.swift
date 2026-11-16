@@ -57,7 +57,7 @@ public enum PrintFailure: Error, CustomStringConvertible {
 public struct PrintService: Sendable {
     public let model: PrinterModel
     public let output: PrintOutput
-    public var options = RasterOptions()
+    public var options: RasterOptions
     /// Called once per page; the logo is stacked above or below the receipt (per its position) before the feed and cut.
     public var logo: (@Sendable () -> PlacedLogo?)?
     /// Called once per page; the print density to send before the page (nil = send nothing).
@@ -66,6 +66,7 @@ public struct PrintService: Sendable {
     public init(model: PrinterModel, output: PrintOutput) {
         self.model = model
         self.output = output
+        self.options = model.rasterOptions
     }
 
     public func print(document: Data, declaredFormat: String?, jobID: Int) throws -> PrintOutcome {
@@ -109,7 +110,7 @@ public struct PrintService: Sendable {
                 if let placed = logo?(), placed.bitmap.width == bitmap.width { bitmap = placed.applied(to: bitmap) }
                 outcome.rasterWidth = bitmap.width
                 outcome.rasterHeight = max(outcome.rasterHeight, bitmap.height)
-                payload.append(try RasterReceipt.build(bitmap: bitmap, model: model, density: density?()))
+                payload.append(try RasterReceipt.build(bitmap: bitmap, model: model, density: density?(), speed: model.effectivePrintSpeed))
             } catch {
                 throw PrintFailure.raster("\(error)")
             }
